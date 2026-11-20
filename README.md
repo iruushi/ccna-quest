@@ -34,6 +34,16 @@ mode pause, et des récompenses jeu que tu choisis. Fonctionne hors ligne une fo
 - **Windows (Edge)** : ouvre l'adresse, menu … › **Applications › Installer ce site en tant qu'application**.
   Avec Chrome : icône d'installation à droite de la barre d'adresse.
 
+## Ludothèque (onglet Jeux)
+
+1. Dans Playnite : exporte ta bibliothèque en CSV.
+2. Dans l'appli, onglet **Jeux** : choisis le fichier, puis **Importer**.
+3. Si la synchro est connectée, l'appli demande à ton serveur les genres Steam de chaque jeu
+   (grâce à `steamAppId`) et trie tout seule les jeux à histoire. Le reste va dans « À trier » :
+   touche le bouton du jeu pour le classer.
+4. « Commencer » / « Terminé ! » pour suivre le jeu en cours. La récompense
+   « Lancer un nouveau jeu solo » te propose les prochains jeux de la liste.
+
 ## Synchro téléphone ↔ PC
 
 - **Automatique** (recommandé) : installe le serveur du dossier `ccna-sync/` sur ton Proxmox

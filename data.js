@@ -274,6 +274,17 @@ const DATA = {
 
   ranks: ['Stagiaire réseau', 'Technicien N1', 'Technicien N2', 'Technicien réseau', 'Admin réseau', 'Admin confirmé', 'Ingénieur réseau', 'Ingénieur senior', 'Architecte réseau', 'Prêt pour le CCNA'],
 
+  suggestedRewards: [
+    { id: 's1', name: 'Une partie de TFT en plus, sans culpabiliser', cost: 100 },
+    { id: 's2', name: 'Session Minecraft libre', cost: 150 },
+    { id: 's3', name: 'Soirée LoL avec les potes, sans regarder l\'heure', cost: 200 },
+    { id: 's4', name: 'Soirée Satisfactory : « encore une usine »', cost: 300 },
+    { id: 's5', name: 'Partie de Civ 6 en mode « encore un tour »', cost: 400 },
+    { id: 's6', name: 'Grosse session histoire sur le jeu solo du moment', cost: 500 },
+    { id: 's7', name: 'Lancer un nouveau jeu solo de ma ludothèque', cost: 1500 },
+    { id: 's8', name: 'M\'offrir un jeu que je veux vraiment', cost: 3000 }
+  ],
+
   defaultRewards: [
     { id: 'r1', name: 'Session multi avec les potes, sans regarder l\'heure', cost: 150 },
     { id: 'r2', name: 'Soirée jeu sans limite', cost: 300 },

@@ -11,7 +11,7 @@ const DEFAULT_TARGET = '2027-06-30';
 /* ---------- État ---------- */
 const fresh = () => ({ v: 1, xp: 0, spent: 0, modules: [], exams: {}, labs: {}, days: [], pauses: [],
   rewards: D.defaultRewards.map(r => ({ ...r })), redeemed: [], mode: null, daily: null, bonus: null,
-  stats: { answered: 0, correct: 0 }, created: today(), modLog: {}, modSteps: {}, plan: null });
+  stats: { answered: 0, correct: 0 }, created: today(), modLog: {}, modSteps: {}, plan: null, games: {} });
 let st = fresh(), memOnly = false;
 try { const raw = localStorage.getItem(KEY); if (raw) st = Object.assign(fresh(), JSON.parse(raw)); }
 catch (e) { memOnly = true; }
@@ -321,6 +321,140 @@ function planCard() {
   </section>`;
 }
 
+
+/* ---------- Ludothèque ---------- */
+const GSTAT = { todo: 'À faire', current: 'En cours', done: 'Terminé', skip: 'Pas intéressé' };
+let gFilter = 'story', gSearch = '', gLimit = 60, pickMode = false, enrich = { running: false, msg: '' };
+const gList = () => Object.entries(st.games || {}).map(([k, g]) => ({ k, ...g }));
+function nextSuggestions(n = 3) {
+  return gList().filter(g => g.story === true && g.status === 'todo' && !g.hidden)
+    .sort((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || (a.hltb ?? 999) - (b.hltb ?? 999) || a.name.localeCompare(b.name, 'fr'))
+    .slice(0, n);
+}
+function setGame(k, patch, manualKeys) {
+  const g = st.games[k]; if (!g) return;
+  Object.assign(g, patch); g.manual = { ...(g.manual || {}) };
+  for (const m of manualKeys || []) g.manual[m] = true;
+  g.t = Date.now(); save();
+}
+function gamesFiltered() {
+  const q = L.gameKey(gSearch);
+  return gList().filter(g => {
+    if (q && !L.gameKey(g.name).includes(q)) return false;
+    if (gFilter === 'all') return true;
+    if (g.hidden && gFilter !== 'hidden') return false;
+    if (gFilter === 'story') return g.story === true && g.status === 'todo';
+    if (gFilter === 'current') return g.status === 'current';
+    if (gFilter === 'done') return g.status === 'done';
+    if (gFilter === 'sort') return g.story == null && g.status !== 'skip';
+    if (gFilter === 'other') return g.story === false;
+    if (gFilter === 'hidden') return g.hidden;
+    return true;
+  }).sort((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || a.name.localeCompare(b.name, 'fr'));
+}
+function gameRow(g) {
+  const story = g.story === true ? 'Histoire' : g.story === false ? 'Autre' : 'À trier';
+  return `<div class="game"><div><b>${h(g.name)}</b>${g.fav ? ' <span class="tag b">Favori</span>' : ''}<br>
+      <span class="mute">${h((g.platforms || []).join(' · ') || 'Plateforme inconnue')}${g.hltb ? ` · ~${g.hltb} h` : ''}${g.meta && g.meta.genres.length ? ` · ${h(g.meta.genres.slice(0, 3).join(', '))}` : ''}</span></div>
+    <div class="acts">
+      <button class="btn sm" data-act="gstory" data-k="${h(g.k)}" aria-label="Changer le type de ${h(g.name)}">${story}</button>
+      <select data-act="gstatus" data-k="${h(g.k)}" aria-label="Statut de ${h(g.name)}">${Object.entries(GSTAT).map(([v, l]) => `<option value="${v}" ${g.status === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    </div></div>`;
+}
+function listHtml() {
+  const list = gamesFiltered();
+  return list.length ? list.slice(0, gLimit).map(gameRow).join('') + (list.length > gLimit ? `<div class="row" style="margin-top:10px"><button class="btn" data-act="gmore">Afficher plus (${list.length - gLimit})</button></div>` : '')
+    : '<p class="mute">Aucun jeu dans cette catégorie.</p>';
+}
+function viewGames() {
+  const all = gList();
+  const c = k => all.filter(g => !g.hidden && (k === 'story' ? g.story === true && g.status === 'todo' : k === 'current' ? g.status === 'current' : k === 'done' ? g.status === 'done' && g.story === true : k === 'sort' ? g.story == null && g.status !== 'skip' : g.story === false)).length;
+  const cur = all.filter(g => g.status === 'current' && g.story !== false);
+  const sugg = nextSuggestions();
+  const withSteam = all.filter(g => g.steam && !g.meta && !g.metaMiss && !(g.manual && g.manual.story)).length;
+  const chips = [['story', `Histoire à faire (${c('story')})`], ['current', `En cours (${all.filter(g => g.status === 'current').length})`], ['done', `Terminés (${c('done')})`], ['sort', `À trier (${c('sort')})`], ['other', `Autres jeux (${c('other')})`], ['all', `Tous (${all.length})`]];
+  if (!all.length) return `<h2>Ludothèque</h2>
+    <section class="card"><h3>Importe ta bibliothèque Playnite</h3>
+    <p class="mute">Dans Playnite, exporte ta bibliothèque en CSV, puis choisis le fichier ici. Tu peux aussi coller une simple liste de jeux, un par ligne.</p>${importForm()}</section>`;
+  return `<h2>Ludothèque</h2>
+    ${pickMode ? `<section class="card" style="border-color:var(--buoy)"><h3>Récompense débloquée : choisis ton prochain jeu solo</h3>${sugg.length ? sugg.map(g => `<div class="row sp" style="padding:6px 0"><span><b>${h(g.name)}</b> <span class="mute">${h((g.platforms || []).join(' · '))}${g.hltb ? ` · ~${g.hltb} h` : ''}</span></span><button class="btn a sm" data-act="gstart" data-k="${h(g.k)}">Commencer</button></div>`).join('') : '<p class="mute">Aucun jeu à histoire « à faire » : trie quelques jeux d\'abord.</p>'}<button class="btn sm" data-act="gpickno" style="margin-top:8px">Plus tard</button></section>` : ''}
+    ${cur.length ? cur.map(g => `<section class="card"><p class="mute" style="margin:0">En cours</p><div class="row sp"><h3 style="margin:0">${h(g.name)}</h3><button class="btn a" data-act="gdone" data-k="${h(g.k)}">Terminé !</button></div><p class="mute" style="margin:4px 0 0">${h((g.platforms || []).join(' · '))}${g.hltb ? ` · ~${g.hltb} h` : ''}</p></section>`).join('')
+      : sugg.length ? `<section class="card"><h3>Prochain jeu conseillé</h3><div class="row sp"><span><b>${h(sugg[0].name)}</b> <span class="mute">${h((sugg[0].platforms || []).join(' · '))}</span></span><button class="btn p sm" data-act="gstart" data-k="${h(sugg[0].k)}">Commencer</button></div><p class="mute" style="margin:6px 0 0">Ou débloque la récompense « nouveau jeu solo » dans Bonus pour te l'offrir en récompense.</p></section>` : ''}
+    ${withSteam || enrich.running || enrich.msg ? `<section class="card"><h3>Tri automatique avec Steam</h3>
+      <p class="mute" style="margin:0 0 8px">${Sync.on() ? (withSteam === 0 ? '' : `${withSteam} jeu${withSteam > 1 ? 'x' : ''} peu${withSteam > 1 ? 'vent' : 't'} être trié${withSteam > 1 ? 's' : ''} grâce à leur fiche Steam (genres, solo ou non). Ça prend quelques minutes pour une grosse bibliothèque.`) : 'Connecte la synchro (Réglages) : c\'est ton serveur qui interroge la boutique Steam.'}</p>
+      <p id="enrichst" class="mute" style="margin:0 0 8px">${h(enrich.msg)}</p>
+      ${Sync.on() && withSteam ? `<button class="btn p" data-act="genrich" ${enrich.running ? 'disabled' : ''}>${enrich.running ? 'Tri en cours…' : 'Trier mes jeux'}</button>` : ''}</section>` : ''}
+    <div class="chips" role="group" aria-label="Filtre">${chips.map(([v, l]) => `<button data-act="gfilter" data-v="${v}" aria-pressed="${gFilter === v}">${l}</button>`).join('')}</div>
+    <input type="text" id="gsearch" placeholder="Rechercher un jeu" value="${h(gSearch)}" autocomplete="off" style="margin-bottom:6px">
+    ${gFilter === 'sort' ? '<p class="mute">Touche le bouton « À trier » pour dire si c\'est un jeu à histoire ou un autre type.</p>' : ''}
+    <div id="glist">${listHtml()}</div>
+    <section class="card" style="margin-top:16px"><h3>Ajouter un jeu</h3><form id="gaddform" class="row"><input type="text" id="gadd" placeholder="Nom du jeu" required style="flex:1 1 200px"><button class="btn p" type="submit">Ajouter</button></form></section>
+    <details class="card"><summary><b>Réimporter depuis Playnite</b></summary><p class="mute">Les nouveaux jeux sont ajoutés ; tes statuts et ton tri sont conservés.</p>${importForm()}</details>`;
+}
+function importForm() {
+  return `<label class="f" for="gfile">Fichier exporté (CSV, JSON ou TXT)</label><input type="file" id="gfile" accept=".csv,.json,.txt,text/csv,application/json,text/plain">
+    <label class="f" for="gpaste">ou colle le contenu ici</label><textarea id="gpaste" style="min-height:90px" placeholder="name,sourceName,…"></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn p" data-act="gimport">Importer</button></div>`;
+}
+function importGames(text) {
+  let parsed;
+  try { parsed = L.parseLibrary(text); } catch (e) { toast('Fichier illisible'); return; }
+  if (!parsed.length) { toast('Aucun jeu trouvé dans ce fichier'); return; }
+  st.games = st.games || {};
+  let added = 0, now = Date.now();
+  for (const g of parsed) {
+    const ex = st.games[g.key];
+    if (ex) {
+      ex.platforms = [...new Set([...(ex.platforms || []), ...g.platforms])];
+      ex.steam = ex.steam || g.steam; ex.hidden = g.hidden; ex.fav = ex.fav || g.fav; ex.hltb = ex.hltb ?? g.hltb;
+      if (!(ex.manual && ex.manual.story) && ex.story == null && g.story != null) ex.story = g.story;
+      if (!(ex.manual && ex.manual.status) && ex.status === 'todo' && g.status !== 'todo') ex.status = g.status;
+      ex.t = now;
+    } else {
+      st.games[g.key] = { name: g.name, platforms: g.platforms, genres: g.genres, steam: g.steam, hltb: g.hltb, story: g.story,
+        status: g.status, fav: g.fav, hidden: g.hidden, t: now }; added++;
+    }
+  }
+  save(); gFilter = 'all'; render();
+  toast(`${parsed.length} jeux lus, ${added} nouveaux`);
+  if (Sync.on()) runEnrich();
+}
+async function runEnrich() {
+  if (enrich.running || !Sync.on()) return;
+  enrich.running = true;
+  const msg = t => { enrich.msg = t; const el = document.getElementById('enrichst'); if (el) el.textContent = t; };
+  const todo = () => gList().filter(g => g.steam && !g.meta && !g.metaMiss && !(g.manual && g.manual.story));
+  const total = todo().length; let stuck = 0;
+  if (route() === 'games') render();
+  try {
+    while (todo().length) {
+      const batch = todo().slice(0, 25);
+      const r = await Sync.api('/api/ccna/steam?ids=' + batch.map(g => g.steam).join(','));
+      let progressed = 0;
+      for (const g of batch) {
+        if (!(g.steam in r.items)) continue;
+        const meta = r.items[g.steam], G = st.games[g.k];
+        if (meta) { G.meta = meta; const cls = L.classifySteam(G.name, meta); if (cls !== null) G.story = cls; }
+        else G.metaMiss = true;
+        G.t = Date.now(); progressed++;
+      }
+      save({ noSync: true });
+      msg(`${total - todo().length}/${total} jeux analysés…`);
+      if (route() === 'games' && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')) { const gl = document.getElementById('glist'); if (gl) gl.innerHTML = listHtml(); }
+      if (r.limited || !progressed) {
+        if (++stuck > 6) { msg('Steam limite les demandes : relance le tri plus tard, il reprendra où il s\'est arrêté.'); break; }
+        msg(`${total - todo().length}/${total} analysés · Steam demande une pause, reprise dans 60 s…`);
+        await new Promise(res => setTimeout(res, 60000));
+      } else stuck = 0;
+    }
+    if (!todo().length) msg(`Tri terminé : ${total} jeux analysés. Vérifie l'onglet « À trier » pour le reste.`);
+  } catch (e) {
+    msg(e.status === 404 ? 'Le serveur n\'a pas encore la fonction Steam : lance update-ct.sh sur le Proxmox.' : 'Serveur injoignable (Tailscale actif ?) : relance le tri plus tard.');
+  } finally {
+    enrich.running = false; save(); if (route() === 'games') render();
+  }
+}
+
 /* ---------- Récompenses ---------- */
 let pendingRedeem = null;
 function viewRewards() {
@@ -331,6 +465,7 @@ function viewRewards() {
         ? `<button class="btn a sm" data-act="redeem-ok" data-id="${r.id}">Confirmer</button><button class="btn sm" data-act="redeem-no">Annuler</button>`
         : `<button class="btn p sm" data-act="redeem" data-id="${r.id}" ${tokens() < r.cost ? 'disabled' : ''}>Débloquer</button><button class="btn sm" data-act="delrw" data-id="${r.id}" aria-label="Supprimer ${h(r.name)}">Suppr.</button>`}</div></div>
       ${tokens() < r.cost ? `<div class="bar" style="background:var(--line);margin-top:10px"><i style="width:${Math.max(0, Math.round(tokens() / r.cost * 100))}%"></i></div>` : ''}</section>`).join('')}
+    ${D.suggestedRewards.some(x => !st.rewards.some(r => r.id === x.id)) ? `<section class="card"><h3>Pack de récompenses gamer</h3><p class="mute">TFT, Minecraft, LoL, Satisfactory, Civ 6, sessions histoire et nouveau jeu solo, de 100 à 3 000 jetons. Tu pourras modifier ou supprimer chaque récompense.</p><button class="btn p" data-act="rwpack">Ajouter le pack</button></section>` : ''}
     <section class="card"><h3>Ajouter une récompense</h3>
       <form id="rwform"><label class="f" for="rwn">Récompense</label><input type="text" id="rwn" required maxlength="80" placeholder="Ex. : soirée raid avec la team">
       <label class="f" for="rwc">Coût en jetons</label><input type="number" id="rwc" required min="10" step="10" value="200" style="max-width:160px">
@@ -354,7 +489,7 @@ function viewSettings() {
       <label class="f" for="imp">Importer un code</label><textarea id="imp" style="min-height:90px" placeholder="Colle ici un code exporté"></textarea>
       <div class="row" style="margin-top:8px"><button class="btn" data-act="import">Importer (remplace la progression de cet appareil)</button></div></section>
     <section class="card"><h3>Remise à zéro</h3><p class="mute">Efface la progression de cet appareil et le déconnecte de la synchro. Pour repartir de zéro partout, supprime aussi la fiche dans l'admin PocketBase.</p><button class="btn" data-act="reset">${resetArmed ? 'Clique encore pour tout effacer' : 'Tout effacer'}</button></section>
-    <p class="mute">CCNA Quest v1.2 · fonctionne hors ligne une fois installée.</p>`;
+    <p class="mute">CCNA Quest v1.3 · fonctionne hors ligne une fois installée.</p>`;
 }
 function exportCode() { return btoa(unescape(encodeURIComponent(JSON.stringify(st)))); }
 
@@ -422,7 +557,7 @@ const Sync = (() => {
     }
   }
   function soon() { if (!on()) return; clearTimeout(timer); timer = setTimeout(run, 2500); }
-  return { login, logout, run, soon, on, cfg: () => cfg, status: () => status };
+  return { login, logout, run, soon, on, api, cfg: () => cfg, status: () => status };
 })();
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') Sync.run(); });
 window.addEventListener('online', () => Sync.run());
@@ -454,7 +589,7 @@ function render() {
   document.querySelectorAll('#tabs a').forEach(a => a.dataset.v === v ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
   const main = $('#main');
   main.innerHTML = r.startsWith('lab-') ? viewLab(r.slice(4)) :
-    r === 'labs' ? viewLabs() : r === 'parcours' ? viewParcours() : r === 'rewards' ? viewRewards() : r === 'settings' ? viewSettings() : viewToday();
+    r === 'labs' ? viewLabs() : r === 'games' ? viewGames() : r === 'parcours' ? viewParcours() : r === 'rewards' ? viewRewards() : r === 'settings' ? viewSettings() : viewToday();
   renderHero();
   const sf = $('#syncform');
   if (sf) sf.addEventListener('submit', async e => {
@@ -462,6 +597,13 @@ function render() {
     const st0 = $('#syncst'); st0.textContent = 'Connexion…';
     try { await Sync.login($('#su').value, $('#se').value, $('#sp').value); render(); toast('Synchro activée'); }
     catch (err) { st0.textContent = err.status === 400 ? 'E-mail ou mot de passe incorrect' : 'Serveur injoignable : vérifie l\'adresse et que Tailscale est actif'; }
+  });
+  const ga = $('#gaddform');
+  if (ga) ga.addEventListener('submit', e => {
+    e.preventDefault(); const n = $('#gadd').value.trim(); if (!n) return;
+    const k = L.gameKey(n); st.games = st.games || {};
+    if (!st.games[k]) st.games[k] = { name: n, platforms: [], genres: [], steam: null, hltb: null, story: true, status: 'todo', fav: false, hidden: false, manual: { story: true }, t: Date.now() };
+    save(); render(); toast('Jeu ajouté');
   });
   const rw = $('#rwform');
   if (rw) rw.addEventListener('submit', e => {
@@ -496,6 +638,26 @@ document.addEventListener('click', e => {
   }
   else if (act === 'next') next(run, isBonus);
   else if (act === 'syncnow') Sync.run();
+  else if (act === 'rwpack') {
+    for (const x of D.suggestedRewards) if (!st.rewards.some(r => r.id === x.id)) st.rewards.push({ ...x });
+    st.rewards.sort((a, b) => a.cost - b.cost); save(); render(); toast('Pack ajouté');
+  }
+  else if (act === 'gfilter') { gFilter = b.dataset.v; gLimit = 60; render(); }
+  else if (act === 'gmore') { gLimit += 100; $('#glist').innerHTML = listHtml(); }
+  else if (act === 'gstory') {
+    const g = st.games[b.dataset.k]; const nxt = g.story === true ? false : g.story === false ? null : true;
+    setGame(b.dataset.k, { story: nxt }, nxt === null ? [] : ['story']); $('#glist').innerHTML = listHtml();
+  }
+  else if (act === 'gstart') { setGame(b.dataset.k, { status: 'current' }, ['status']); pickMode = false; toast('Bonne partie !'); render(); }
+  else if (act === 'gdone') { setGame(b.dataset.k, { status: 'done', doneAt: today() }, ['status']); toast('Jeu terminé, bravo !'); render(); }
+  else if (act === 'gpickno') { pickMode = false; render(); }
+  else if (act === 'genrich') runEnrich();
+  else if (act === 'gimport') {
+    const f = $('#gfile'), txt = $('#gpaste').value;
+    if (f && f.files && f.files[0]) { f.files[0].text().then(importGames); }
+    else if (txt.trim()) importGames(txt);
+    else toast('Choisis un fichier ou colle une liste');
+  }
   else if (act === 'synclogout') { Sync.logout(); render(); }
   else if (act === 'mread') {
     const id = b.dataset.id, ms = st.modSteps[id] || (st.modSteps[id] = {});
@@ -532,6 +694,7 @@ document.addEventListener('click', e => {
   else if (act === 'redeem-no') { pendingRedeem = null; render(); }
   else if (act === 'redeem-ok') {
     const r = st.rewards.find(x => x.id === b.dataset.id);
+    if (r && tokens() >= r.cost && /(nouveau jeu|jeu solo)/i.test(r.name)) { pickMode = true; setTimeout(() => { location.hash = '#games'; }, 400); }
     if (r && tokens() >= r.cost) { st.spent += r.cost; st.redeemed.push({ id: 'x' + Date.now().toString(36), name: r.name, cost: r.cost, date: today() }); save(); toast('Profite bien !'); }
     pendingRedeem = null; render();
   }
@@ -585,10 +748,16 @@ document.addEventListener('change', e => {
     else if (v && v > today()) { plan.target = v; plan.start = today(); plan.startRemaining = TOTAL_MODS - st.modules.length; }
     else { toast('Choisis une date future'); }
     save(); render();
+  } else if (t.dataset.act === 'gstatus') {
+    setGame(t.dataset.k, { status: t.value, ...(t.value === 'done' ? { doneAt: today() } : {}) }, ['status']);
+    if (gFilter !== 'all') $('#glist').innerHTML = listHtml();
   } else if (t.dataset.act === 'exam') {
     const v = t.value === '' ? null : Math.max(0, Math.min(100, +t.value));
     st.exams[t.dataset.c] = v; save();
   }
+});
+document.addEventListener('input', e => {
+  if (e.target.id === 'gsearch') { gSearch = e.target.value; gLimit = 60; $('#glist').innerHTML = listHtml(); }
 });
 // Entrée = Vérifier dans les champs de réponse
 document.addEventListener('keydown', e => {

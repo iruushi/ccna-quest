@@ -281,11 +281,122 @@ const L = (() => {
     const red = new Map();
     for (const r of [...(a.redeemed || []), ...(b.redeemed || [])]) if (r.id && !red.has(r.id)) red.set(r.id, r);
     out.redeemed = [...red.values()].sort((x, y) => (x.date + x.id).localeCompare(y.date + y.id));
+    const games = clone(a.games || {});
+    for (const [k, g] of Object.entries(b.games || {})) if (!games[k] || (g.t || 0) > (games[k].t || 0)) games[k] = clone(g);
+    out.games = games;
     out.updatedAt = Math.max(a.updatedAt || 0, b.updatedAt || 0);
     return out;
   }
 
-  return { mergeState, LWW, daysBetween, weekStart, allModules, nextModule, pace, compile, normCmds, checkCmd, getBlock, checkOutput, checkForm, checkGen, GENS, expand6, compress6,
+  /* ---------- Ludothèque : import Playnite (CSV, JSON ou liste) ---------- */
+  const gameKey = n => String(n).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[™®©]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  function parseCSV(text) {
+    const first = text.split(/\r?\n/)[0] || '';
+    const cnt = c => (first.match(new RegExp('\\' + c, 'g')) || []).length;
+    const sep = ['\t', ';', ','].sort((a, b) => cnt(b) - cnt(a))[0];
+    const rows = []; let row = [], cell = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+      else if (c === '"') q = true;
+      else if (c === sep) { row.push(cell); cell = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+      else cell += c;
+    }
+    if (cell || row.length) { row.push(cell); rows.push(row); }
+    return rows.filter(r => r.some(x => x.trim()));
+  }
+  const listify = v => Array.isArray(v) ? v.map(x => (x && typeof x === 'object') ? (x.Name || x.name || '') : String(x)).filter(Boolean)
+    : String(v ?? '').split(/[,;|]/).map(s => s.trim()).filter(Boolean);
+  function hours(v) {
+    if (v == null || v === '') return null;
+    const s = String(v).toLowerCase().replace(',', '.');
+    let m = s.match(/(\d+(?:\.\d+)?)\s*h(?:\s*(\d+))?/);
+    if (m) return Math.round((+m[1] + (m[2] ? +m[2] / 60 : 0)) * 10) / 10;
+    m = s.match(/^(\d+):(\d{2})/); if (m) return Math.round((+m[1] + +m[2] / 60) * 10) / 10;
+    const n = parseFloat(s); if (isNaN(n) || n <= 0) return null;
+    return n > 300 ? Math.round(n / 60 * 10) / 10 : n;   // > 300 : probablement des minutes
+  }
+  const COLS = {
+    name: /^(name|nom|title|titre|game|jeu)$/i,
+    platform: /^(source|sources|sourcename|platform|platforms|plateforme|plateformes|library|bibliotheque|bibliothèque|store)s?$/i,
+    steam: /^steam ?app ?id$/i,
+    hidden: /^(hidden|masqué|masque)$/i,
+    fav: /^(favorite|favourite|favori)$/i,
+    genres: /^(genres?|genre)$/i,
+    tags: /^(tags?|étiquettes?|etiquettes?)$/i,
+    features: /^(features?|fonctionnalités|fonctionnalites|categories|catégories)$/i,
+    hltb: /(howlong|hltb|main ?story|durée|duree|histoire principale)/i,
+    status: /(completion|statut|status)/i
+  };
+  function mapRow(o) {
+    const pick = re => { for (const k of Object.keys(o)) if (re.test(k.trim())) return o[k]; return undefined; };
+    return { name: String(pick(COLS.name) ?? '').trim(), platforms: listify(pick(COLS.platform)),
+      genres: [...listify(pick(COLS.genres)), ...listify(pick(COLS.tags))], features: listify(pick(COLS.features)),
+      hltb: hours(pick(COLS.hltb)), rawStatus: String(pick(COLS.status) ?? ''),
+      steam: (String(pick(COLS.steam) ?? '').match(/^\d+$/) || [null])[0],
+      hidden: /^(true|1|oui|yes)$/i.test(String(pick(COLS.hidden) ?? '')),
+      fav: /^(true|1|oui|yes)$/i.test(String(pick(COLS.fav) ?? '')) };
+  }
+  function parseLibrary(text) {
+    text = text.replace(/^﻿/, '').trim();
+    if (!text) return [];
+    let items;
+    if (/^[[{]/.test(text)) {
+      let j = JSON.parse(text); if (!Array.isArray(j)) j = j.games || j.Games || j.items || Object.values(j);
+      items = j.map(mapRow);
+    } else {
+      const rows = parseCSV(text);
+      const head = rows[0].map(x => x.trim());
+      if (rows.length > 1 && head.some(h => COLS.name.test(h))) {
+        items = rows.slice(1).map(r => mapRow(Object.fromEntries(head.map((h, i) => [h, r[i] ?? '']))));
+      } else items = text.split(/\r?\n/).map(l => ({ name: l.replace(/^[-*•\d.)\s]+/, '').trim(), platforms: [], genres: [], features: [], hltb: null, rawStatus: '' }));
+    }
+    const seen = new Map();
+    for (const g of items) {
+      if (!g.name) continue;
+      const k = gameKey(g.name); if (!k) continue;
+      const prev = seen.get(k);
+      if (prev) { prev.platforms = [...new Set([...prev.platforms, ...g.platforms])]; prev.genres = [...new Set([...prev.genres, ...g.genres])]; prev.hltb = prev.hltb ?? g.hltb; prev.steam = prev.steam || g.steam; prev.hidden = prev.hidden && g.hidden; prev.fav = prev.fav || g.fav; }
+      else seen.set(k, { ...g, key: k });
+    }
+    return [...seen.values()].map(g => ({ ...g, status: statusFrom(g.rawStatus), story: isStory(g) }));
+  }
+  function statusFrom(s) {
+    s = s.toLowerCase();
+    if (/(complet|beaten|termin|fini|100)/.test(s)) return 'done';
+    if (/(playing|en cours|on hold|pause)/.test(s)) return 'current';
+    if (/(abandon|not interested|pas intéress)/.test(s)) return 'skip';
+    return 'todo';
+  }
+  const NOT_STORY = /\b(league of legends|teamfight tactics|minecraft|satisfactory|counter-strike|valorant|fortnite|rocket league|apex legends|overwatch|dota|hearthstone|fall guys|warzone|pubg|factorio|civilization|age of empires|football manager|fifa|ea sports fc|f1 2\d|euro truck|stardew)\b/i;
+  function isStory(g) {
+    if (NOT_STORY.test(g.name)) return false;
+    const txt = [...g.genres, ...g.features].join(' | ').toLowerCase();
+    const multiOnly = /(massively multiplayer|mmo|moba|battle royale|online pvp only)/.test(txt) && !/(single|solo)/.test(txt);
+    if (multiOnly) return false;
+    const storyish = /(story|narrat|histoire|rpg|role-playing|jeu de rôle|jeu de role|adventure|aventure|action-adventure|visual novel|walking simulator|choices matter|horror|horreur|open world|monde ouvert)/.test(txt);
+    const otherish = /(strategy|stratégie|strategie|simulation|sports?|racing|course|puzzle|card|cartes|sandbox|bac à sable|city builder|tower defense|fighting|combat)/.test(txt);
+    if (storyish) return true;
+    if (otherish) return false;
+    return /(single|solo)/.test(txt) ? null : null; // inconnu : à trancher à la main
+  }
+
+  // Avec la fiche Steam : genres officiels + catégories (Single-player…)
+  function classifySteam(name, meta) {
+    if (!meta) return null;
+    if (NOT_STORY.test(name)) return false;
+    if (meta.type && meta.type !== 'game') return false;
+    const g = meta.genres.join('|').toLowerCase(), c = meta.categories.join('|').toLowerCase();
+    if (!/single-player/.test(c)) return false;
+    if (/massively multiplayer/.test(g)) return false;
+    if (/(adventure|rpg)/.test(g)) return true;
+    if (/(strategy|simulation|sports|racing|casual)/.test(g)) return false;
+    return null;
+  }
+
+  return { classifySteam, gameKey, parseCSV, parseLibrary, isStory, hours, mergeState, LWW, daysBetween, weekStart, allModules, nextModule, pace, compile, normCmds, checkCmd, getBlock, checkOutput, checkForm, checkGen, GENS, expand6, compress6,
     ip2n, n2ip, maskN, isIp, dayKey, addDays, streak, bestStreak, isPaused, levelFromXp, xpForLevel, unlocked, buildDaily, progress };
 })();
 

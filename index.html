@@ -50,13 +50,13 @@ button{cursor:pointer}
 .waves{display:block;width:100%;height:18px;margin-top:-1px}
 
 /* Navigation */
-nav.tabs{position:fixed;inset:auto 0 0 0;background:var(--bg);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,minmax(0,1fr));padding-bottom:var(--safe-b);z-index:5}
-nav.tabs a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;min-height:56px;font-size:12px;color:var(--mute);text-decoration:none}
+nav.tabs{position:fixed;inset:auto 0 0 0;background:var(--bg);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(6,minmax(0,1fr));padding-bottom:var(--safe-b);z-index:5}
+nav.tabs a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 1px;min-height:56px;font-size:11.5px;color:var(--mute);text-decoration:none}
 nav.tabs a svg{width:22px;height:22px}
 nav.tabs a[aria-current=page]{color:var(--sea2);font-weight:650}
 :root[data-theme=dark] nav.tabs a[aria-current=page]{color:#7cc4ea}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]) nav.tabs a[aria-current=page]{color:#7cc4ea}}
-@media(min-width:900px){body{padding-bottom:0}nav.tabs{position:sticky;top:0;inset:auto;border:0;border-bottom:1px solid var(--line);max-width:none;grid-template-columns:repeat(5,auto);justify-content:center;gap:12px}nav.tabs a{flex-direction:row;gap:8px;font-size:15px;padding:12px 16px}}
+@media(min-width:900px){body{padding-bottom:0}nav.tabs{position:sticky;top:0;inset:auto;border:0;border-bottom:1px solid var(--line);max-width:none;grid-template-columns:repeat(6,auto);justify-content:center;gap:12px}nav.tabs a{flex-direction:row;gap:8px;font-size:15px;padding:12px 16px}}
 
 /* Contenu */
 main{padding:18px 0 24px}
@@ -107,6 +107,12 @@ pre{font-family:var(--mono);font-size:13.5px;white-space:pre-wrap;background:var
 details summary{cursor:pointer;min-height:36px;display:flex;align-items:center}
 .toast{position:fixed;left:50%;bottom:calc(90px + var(--safe-b));transform:translateX(-50%);background:var(--sea);color:#fff;padding:10px 16px;border-radius:10px;font-weight:600;z-index:9;max-width:90vw}
 @media(min-width:900px){.toast{bottom:24px}}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.chips button{min-height:38px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--bg);font-size:14px}
+.chips button[aria-pressed=true]{background:var(--sea2);border-color:var(--sea2);color:#fff;font-weight:600}
+.game{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.game select{min-height:40px;border-radius:8px;border:1px solid var(--line);background:var(--bg);padding:4px 8px;font-size:14px}
+.game .acts{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:14px}
 </style>
 </head>
@@ -146,6 +152,7 @@ details summary{cursor:pointer;min-height:36px;display:flex;align-items:center}
   <a href="#today" data-v="today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Aujourd'hui</a>
   <a href="#labs" data-v="labs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M7 9l2 2-2 2M11 13h4"/></svg>Labos</a>
   <a href="#parcours" data-v="parcours"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M4 19h16M8 15l4-4 3 3 5-6"/></svg>Parcours</a>
+  <a href="#games" data-v="games"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8h12a4 4 0 0 1 4 4v1a4 4 0 0 1-7.2 2.4L14 14h-4l-.8 1.4A4 4 0 0 1 2 13v-1a4 4 0 0 1 4-4z"/><path d="M7 10v4M5 12h4"/><circle cx="16" cy="11" r=".8" fill="currentColor"/><circle cx="18" cy="13" r=".8" fill="currentColor"/></svg>Jeux</a>
   <a href="#rewards" data-v="rewards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8c-2-4-6-4-6-1s6 1 6 1 6 2 6-1-4-3-6 1"/></svg>Bonus</a>
   <a href="#settings" data-v="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/></svg>Réglages</a>
 </nav>
