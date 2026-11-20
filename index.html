@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d3b56">
+<meta name="description" content="Défis quotidiens et labos Packet Tracer pour préparer le CCNA">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>CCNA Quest</title>
+<style>
+/* VOICE  : coach sobre et motivant, ton d'atelier réseau.
+   IDEA   : le carnet de quart d'un phare breton — chaque jour validé rallume la lanterne.
+   PICTURE: un phare en bandeau, faisceau allumé quand le défi du jour est fait.
+   COLOUR : bleu de mer profond dominant, écume claire en support, orange balise en accent.
+   TYPE   : sans-serif système, chasse fixe pour l'IOS ; LAYOUT : une colonne, onglets en bas sur mobile. */
+:root{color-scheme:light dark;
+  --bg:light-dark(#ffffff,#0a1620);--card:light-dark(#f2f6f8,#11222e);--line:light-dark(#d6e1e7,#1f3545);
+  --ink:light-dark(#0f1d27,#e6eef2);--mute:light-dark(#5a6d79,#93a7b3);
+  --sea:#0d3b56;--sea2:#155a80;--foam:light-dark(#e3f0f6,#16303f);
+  --buoy:#ff6a2b;--ok:light-dark(#1f7a4d,#5fd19a);--ko:light-dark(#b3261e,#ff8a80);
+  --mono:ui-monospace,"Cascadia Mono",Consolas,"Roboto Mono",monospace;
+  --safe-b:env(safe-area-inset-bottom,0px)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html{scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,"Segoe UI",Roboto,sans-serif;overflow-x:clip;padding-bottom:calc(76px + var(--safe-b))}
+h1,h2,h3{line-height:1.15;text-wrap:balance;margin:0 0 .4em}
+h2{font-size:22px}h3{font-size:17px}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--buoy);outline-offset:2px}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px}
+
+/* Bandeau phare */
+.hero{background:var(--sea);color:#eaf4f9;padding-top:env(safe-area-inset-top,0px);position:relative;overflow:hidden}
+.hero .wrap{display:grid;grid-template-columns:minmax(0,1fr) 112px;gap:12px;align-items:end;padding-top:18px}
+.hero h1{font-size:15px;font-weight:600;letter-spacing:.01em;opacity:.85;margin:0 0 6px}
+.rank{font-size:clamp(22px,6.5vw,30px);font-weight:750;line-height:1.05;margin:0 0 10px}
+.bar{height:10px;border-radius:6px;background:rgba(255,255,255,.18);overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--buoy);border-radius:6px;transition:width .5s}
+.stats{display:flex;flex-wrap:wrap;gap:6px 18px;margin:10px 0 16px;font-size:14px}
+.stats b{font-size:20px;display:block;line-height:1.1}
+.light svg{display:block;width:112px;height:150px}
+.beam{opacity:0;transition:opacity .8s}
+.lit .beam{opacity:1;animation:sweep 4s ease-in-out infinite}
+@keyframes sweep{0%,100%{opacity:.55}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.lit .beam{animation:none}.bar>i{transition:none}}
+.waves{display:block;width:100%;height:18px;margin-top:-1px}
+
+/* Navigation */
+nav.tabs{position:fixed;inset:auto 0 0 0;background:var(--bg);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,minmax(0,1fr));padding-bottom:var(--safe-b);z-index:5}
+nav.tabs a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;min-height:56px;font-size:12px;color:var(--mute);text-decoration:none}
+nav.tabs a svg{width:22px;height:22px}
+nav.tabs a[aria-current=page]{color:var(--sea2);font-weight:650}
+:root[data-theme=dark] nav.tabs a[aria-current=page]{color:#7cc4ea}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) nav.tabs a[aria-current=page]{color:#7cc4ea}}
+@media(min-width:900px){body{padding-bottom:0}nav.tabs{position:sticky;top:0;inset:auto;border:0;border-bottom:1px solid var(--line);max-width:none;grid-template-columns:repeat(5,auto);justify-content:center;gap:12px}nav.tabs a{flex-direction:row;gap:8px;font-size:15px;padding:12px 16px}}
+
+/* Contenu */
+main{padding:18px 0 24px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin:0 0 14px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sp{justify-content:space-between}
+.mute{color:var(--mute);font-size:14px}
+.tag{display:inline-block;font-size:12.5px;padding:2px 8px;border-radius:999px;background:var(--foam);color:var(--ink);white-space:nowrap}
+.tag.b{background:var(--buoy);color:#1d0d05}
+.btn{min-height:44px;padding:10px 16px;border-radius:10px;border:1px solid var(--line);background:var(--bg)}
+.btn.p{background:var(--sea2);border-color:var(--sea2);color:#fff;font-weight:600}
+.btn.a{background:var(--buoy);border-color:var(--buoy);color:#1d0d05;font-weight:650}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+a.btn{color:inherit;text-decoration:none}a.btn.p{color:#fff}
+.btn.sm{min-height:36px;padding:6px 12px;font-size:14px}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:14px}
+.seg button{min-height:46px;border:0;background:var(--bg);font-size:15px}
+.seg button[aria-pressed=true]{background:var(--sea2);color:#fff;font-weight:600}
+.ticket{background:var(--foam);border-radius:10px;padding:10px 12px;margin:0 0 10px;font-size:15px;white-space:pre-wrap}
+.ticket code,.out{font-family:var(--mono);font-size:13.5px}
+.q{font-weight:650;margin:0 0 10px}
+.opts{display:grid;gap:8px}
+.opt{text-align:start;min-height:46px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg)}
+.opt.good{border-color:var(--ok);box-shadow:inset 4px 0 0 var(--ok)}
+.opt.bad{border-color:var(--ko);box-shadow:inset 4px 0 0 var(--ko)}
+textarea,input[type=text],input[type=number],input[type=date]{width:100%;font-size:16px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg)}
+textarea{font-family:var(--mono);font-size:14px;min-height:130px;resize:vertical;white-space:pre;overflow-x:auto}
+.grid2>.card{margin:0}.grid2{margin-bottom:14px}
+label.f{display:block;font-size:14px;color:var(--mute);margin:8px 0 4px}
+.checks{list-style:none;padding:0;margin:10px 0}
+.checks li{padding:4px 0 4px 26px;position:relative;font-size:15px}
+.checks li::before{content:"";position:absolute;left:4px;top:10px;width:12px;height:12px;border-radius:50%;background:var(--ko)}
+.checks li.ok::before{background:var(--ok)}
+.fb{border-left:4px solid var(--ok);padding:6px 10px;margin:10px 0;font-size:15px}
+.fb.ko{border-color:var(--ko)}
+pre{font-family:var(--mono);font-size:13.5px;white-space:pre-wrap;background:var(--foam);padding:10px 12px;border-radius:10px;margin:8px 0;overflow-x:auto}
+.dots{display:flex;gap:6px;margin:0 0 12px}
+.dots i{width:28px;height:6px;border-radius:3px;background:var(--line)}
+.dots i.ok{background:var(--ok)}.dots i.ko{background:var(--ko)}.dots i.cur{background:var(--buoy)}
+.mods{list-style:none;padding:0;margin:8px 0 0}
+.mods li label{display:flex;gap:10px;align-items:center;min-height:44px;padding:4px 0;border-bottom:1px solid var(--line);font-size:15px}
+.mods input{width:20px;height:20px;accent-color:var(--sea2);flex:none}
+.lab{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:12px;align-items:center;width:100%;text-align:start;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:0 0 10px}
+.lab .n{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--foam);font-weight:700}
+.lab.done .n{background:var(--ok);color:#fff}
+.big{font-size:44px;font-weight:780;line-height:1}
+.banner{background:var(--buoy);color:#1d0d05;border-radius:12px;padding:12px 14px;margin:0 0 14px;font-weight:550}
+details summary{cursor:pointer;min-height:36px;display:flex;align-items:center}
+.toast{position:fixed;left:50%;bottom:calc(90px + var(--safe-b));transform:translateX(-50%);background:var(--sea);color:#fff;padding:10px 16px;border-radius:10px;font-weight:600;z-index:9;max-width:90vw}
+@media(min-width:900px){.toast{bottom:24px}}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:14px}
+</style>
+</head>
+<body>
+<header class="hero" id="hero">
+  <div class="wrap">
+    <div>
+      <h1>CCNA Quest · Ar Mor Logistique</h1>
+      <p class="rank" id="rank">Stagiaire réseau</p>
+      <div class="bar" aria-hidden="true"><i id="xpbar" style="width:0"></i></div>
+      <div class="mute" style="color:#bcd6e4;margin-top:4px" id="xptxt"></div>
+      <div class="stats">
+        <span><b id="st-streak">0</b>jours de quart</span>
+        <span><b id="st-tokens">0</b>jetons</span>
+        <span><b id="st-prog">0 %</b>vers le CCNA</span>
+      </div>
+    </div>
+    <div class="light" id="light" aria-hidden="true">
+      <svg viewBox="0 0 112 150">
+        <polygon class="beam" points="56,30 0,6 0,46" fill="#ffd98a" opacity=".9"/>
+        <polygon class="beam" points="56,30 112,8 112,48" fill="#ffd98a" opacity=".9"/>
+        <path d="M44 22 Q56 10 68 22 Z" fill="#c4322a"/>
+        <rect x="45" y="22" width="22" height="16" rx="2" fill="#24323b"/>
+        <rect x="48" y="25" width="16" height="10" rx="1" fill="#ffe3a3" id="lamp"/>
+        <rect x="41" y="38" width="30" height="4" fill="#24323b"/>
+        <path d="M45 42 L67 42 L72 140 L40 140 Z" fill="#f4f6f7"/>
+        <path d="M46.2 62 L65.8 62 L67 82 L45 82 Z M43.8 102 L68.2 102 L69.4 122 L42.6 122 Z" fill="#c4322a"/>
+        <path d="M56 42 L67 42 L72 140 L56 140 Z" fill="#000" opacity=".12"/>
+        <rect x="30" y="138" width="52" height="12" rx="3" fill="#3b4b55"/>
+      </svg>
+    </div>
+  </div>
+  <svg class="waves" viewBox="0 0 400 18" preserveAspectRatio="none" aria-hidden="true"><path d="M0 8 Q25 0 50 8 T100 8 T150 8 T200 8 T250 8 T300 8 T350 8 T400 8 V18 H0Z" fill="var(--bg)"/></svg>
+</header>
+
+<nav class="tabs" id="tabs" aria-label="Sections">
+  <a href="#today" data-v="today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Aujourd'hui</a>
+  <a href="#labs" data-v="labs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M7 9l2 2-2 2M11 13h4"/></svg>Labos</a>
+  <a href="#parcours" data-v="parcours"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M4 19h16M8 15l4-4 3 3 5-6"/></svg>Parcours</a>
+  <a href="#rewards" data-v="rewards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8c-2-4-6-4-6-1s6 1 6 1 6 2 6-1-4-3-6 1"/></svg>Bonus</a>
+  <a href="#settings" data-v="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/></svg>Réglages</a>
+</nav>
+
+<main class="wrap" id="main" tabindex="-1"></main>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script src="data.js"></script>
+<script src="logic.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
