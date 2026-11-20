@@ -372,7 +372,7 @@ function viewGames() {
   const c = k => all.filter(g => !g.hidden && (k === 'story' ? g.story === true && g.status === 'todo' : k === 'current' ? g.status === 'current' : k === 'done' ? g.status === 'done' && g.story === true : k === 'sort' ? g.story == null && g.status !== 'skip' : g.story === false)).length;
   const cur = all.filter(g => g.status === 'current' && g.story !== false);
   const sugg = nextSuggestions();
-  const withSteam = all.filter(g => g.steam && (!g.meta || !g.meta.tags) && !g.metaMiss && !(g.manual && g.manual.story)).length;
+  const withSteam = all.filter(g => !(g.manual && g.manual.story) && !g.hidden && ((g.steam && (!g.meta || !g.meta.tags) && !g.metaMiss) || (!g.steam && !g.findMiss))).length;
   const chips = [['story', `Histoire à faire (${c('story')})`], ['current', `En cours (${all.filter(g => g.status === 'current').length})`], ['done', `Terminés (${c('done')})`], ['sort', `À trier (${c('sort')})`], ['other', `Autres jeux (${c('other')})`], ['all', `Tous (${all.length})`]];
   if (!all.length) return `<h2>Ludothèque</h2>
     <section class="card"><h3>Importe ta bibliothèque Playnite</h3>
@@ -382,7 +382,7 @@ function viewGames() {
     ${cur.length ? cur.map(g => `<section class="card"><p class="mute" style="margin:0">En cours</p><div class="row sp"><h3 style="margin:0">${h(g.name)}</h3><button class="btn a" data-act="gdone" data-k="${h(g.k)}">Terminé !</button></div><p class="mute" style="margin:4px 0 0">${h((g.platforms || []).join(' · '))}${g.hltb ? ` · ~${g.hltb} h` : ''}</p></section>`).join('')
       : sugg.length ? `<section class="card"><h3>Prochain jeu conseillé</h3><div class="row sp"><span><b>${h(sugg[0].name)}</b> <span class="mute">${h((sugg[0].platforms || []).join(' · '))}</span></span><button class="btn p sm" data-act="gstart" data-k="${h(sugg[0].k)}">Commencer</button></div><p class="mute" style="margin:6px 0 0">Ou débloque la récompense « nouveau jeu solo » dans Bonus pour te l'offrir en récompense.</p></section>` : ''}
     ${withSteam || enrich.running || enrich.msg || all.some(g => g.steam) ? `<section class="card"><h3>Tri automatique avec Steam</h3>
-      <p class="mute" style="margin:0 0 8px">${Sync.on() ? (withSteam === 0 ? '' : `${withSteam} jeu${withSteam > 1 ? 'x' : ''} peu${withSteam > 1 ? 'vent' : 't'} être trié${withSteam > 1 ? 's' : ''} grâce aux tags des joueurs Steam (« Story Rich », « Open World », « Automation »…). Ça prend quelques minutes pour une grosse bibliothèque.`) : 'Connecte la synchro (Réglages) : c\'est ton serveur qui interroge la boutique Steam.'}</p>
+      <p class="mute" style="margin:0 0 8px">${Sync.on() ? (withSteam === 0 ? '' : `${withSteam} jeu${withSteam > 1 ? 'x' : ''} peu${withSteam > 1 ? 'vent' : 't'} être trié${withSteam > 1 ? 's' : ''} grâce à Steam : recherche par nom si besoin, puis tags des joueurs (« Story Rich », « Open World », « Automation »…). Ça prend quelques minutes pour une grosse bibliothèque.`) : 'Connecte la synchro (Réglages) : c\'est ton serveur qui interroge la boutique Steam.'}</p>
       <p id="enrichst" class="mute" style="margin:0 0 8px">${h(enrich.msg)}</p>
       <div class="row">
       ${Sync.on() && withSteam ? `<button class="btn p" data-act="genrich" ${enrich.running ? 'disabled' : ''}>${enrich.running ? 'Tri en cours…' : 'Trier mes jeux'}</button>` : ''}
@@ -430,9 +430,32 @@ async function runEnrich() {
   enrich.running = true;
   const msg = t => { enrich.msg = t; const el = document.getElementById('enrichst'); if (el) el.textContent = t; };
   const todo = () => gList().filter(g => g.steam && (!g.meta || !g.meta.tags) && !g.metaMiss && !(g.manual && g.manual.story));
-  const total = todo().length; let stuck = 0;
+  const needFind = () => gList().filter(g => !g.steam && !g.findMiss && !g.hidden && !(g.manual && g.manual.story));
+  let stuck = 0;
   if (route() === 'games') render();
   try {
+    // 1) jeux sans steamAppId (Epic, Ubisoft, EA…) : recherche par nom sur la boutique Steam
+    const totalFind = needFind().length;
+    while (needFind().length) {
+      const batch = needFind().slice(0, 10);
+      const r = await Sync.api('/api/ccna/steam-find', { method: 'POST', body: JSON.stringify({ names: batch.map(g => g.name) }) });
+      let progressed = 0;
+      for (const g of batch) {
+        if (!(g.name in r.found)) continue;
+        const G = st.games[g.k];
+        if (r.found[g.name]) { G.steam = r.found[g.name]; G.steamFound = true; } else G.findMiss = true;
+        G.t = Date.now(); progressed++;
+      }
+      save({ noSync: true });
+      msg(`Recherche sur Steam : ${totalFind - needFind().length}/${totalFind} jeux…`);
+      if (r.limited || !progressed) {
+        if (++stuck > 6) { msg('Steam limite les demandes : relance le tri plus tard, il reprendra où il s\'est arrêté.'); return; }
+        msg(`Recherche : ${totalFind - needFind().length}/${totalFind} · Steam demande une pause, reprise dans 60 s…`);
+        await new Promise(res => setTimeout(res, 60000));
+      } else stuck = 0;
+    }
+    // 2) tags et genres de chaque jeu identifié
+    const total = todo().length; stuck = 0;
     while (todo().length) {
       const batch = todo().slice(0, 25);
       const r = await Sync.api('/api/ccna/steam?ids=' + batch.map(g => g.steam).join(','));
@@ -453,7 +476,7 @@ async function runEnrich() {
         await new Promise(res => setTimeout(res, 60000));
       } else stuck = 0;
     }
-    if (!todo().length) msg(`Tri terminé : ${total} jeux analysés. Vérifie l'onglet « À trier » pour le reste.`);
+    if (!todo().length && !needFind().length) msg(`Tri terminé : ${total} jeux analysés. Vérifie l'onglet « À trier » pour le reste.`);
   } catch (e) {
     msg(e.status === 404 ? 'Le serveur n\'a pas encore la fonction Steam : lance update-ct.sh sur le Proxmox.' : 'Serveur injoignable (Tailscale actif ?) : relance le tri plus tard.');
   } finally {
@@ -495,7 +518,7 @@ function viewSettings() {
       <label class="f" for="imp">Importer un code</label><textarea id="imp" style="min-height:90px" placeholder="Colle ici un code exporté"></textarea>
       <div class="row" style="margin-top:8px"><button class="btn" data-act="import">Importer (remplace la progression de cet appareil)</button></div></section>
     <section class="card"><h3>Remise à zéro</h3><p class="mute">Efface la progression de cet appareil et le déconnecte de la synchro. Pour repartir de zéro partout, supprime aussi la fiche dans l'admin PocketBase.</p><button class="btn" data-act="reset">${resetArmed ? 'Clique encore pour tout effacer' : 'Tout effacer'}</button></section>
-    <p class="mute">CCNA Quest v1.4.1 · fonctionne hors ligne une fois installée.</p>`;
+    <p class="mute">CCNA Quest v1.5 · fonctionne hors ligne une fois installée.</p>`;
 }
 function exportCode() { return btoa(unescape(encodeURIComponent(JSON.stringify(st)))); }
 
@@ -665,7 +688,7 @@ document.addEventListener('click', e => {
     for (const g of Object.values(st.games || {})) {
       if (all && g.manual) delete g.manual.story;
       if (g.manual && g.manual.story) continue;
-      delete g.metaMiss;
+      delete g.metaMiss; delete g.findMiss;
       g.story = g.meta ? L.classifySteam(g.name, g.meta) : (L.isStory({ name: g.name, genres: g.genres || [], features: [] }));
       g.t = Date.now(); n++;
     }
