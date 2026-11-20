@@ -383,11 +383,40 @@ const L = (() => {
     return /(single|solo)/.test(txt) ? null : null; // inconnu : à trancher à la main
   }
 
-  // Avec la fiche Steam : genres officiels + catégories (Single-player…)
+  // Tags des joueurs Steam (triés par votes) : score « histoire » contre score « autre »
+  const STORY_TAGS = { 'story rich': 3, 'narration': 2, 'choices matter': 2, 'multiple endings': 2, 'cinematic': 1.5, 'visual novel': 3,
+    'interactive fiction': 2.5, 'rpg': 2, 'action rpg': 2, 'jrpg': 2.5, 'party-based rpg': 2, 'open world': 1.5, 'adventure': 1,
+    'action-adventure': 2, 'atmospheric': 1, 'singleplayer': 1, 'horror': 1, 'psychological horror': 1.5, 'detective': 1.5,
+    'mystery': 1.5, 'crime': 1, 'third person': 0.5, 'stealth': 1, 'great soundtrack': 0.5, 'emotional': 1.5, 'character customization': 0.5 };
+  const OTHER_TAGS = { 'strategy': 2, 'simulation': 2, 'sandbox': 2, 'survival': 1, 'building': 2, 'automation': 3, 'city builder': 3,
+    'base building': 2, 'crafting': 1, '4x': 3, 'turn-based strategy': 3, 'grand strategy': 3, 'rts': 3, 'sports': 3, 'racing': 3,
+    'roguelike': 2, 'roguelite': 2, 'puzzle': 2, 'card game': 3, 'deckbuilding': 3, 'multiplayer': 1, 'online co-op': 1, 'co-op': 1,
+    'pvp': 2, 'competitive': 2, 'moba': 4, 'battle royale': 4, 'mmorpg': 4, 'massively multiplayer': 4, 'party game': 2,
+    'fighting': 2, 'tower defense': 3, 'arcade': 1, 'management': 2, 'colony sim': 3, 'farming sim': 3, 'auto battler': 4,
+    'free to play': 1, 'esports': 3, 'team-based': 2, 'hero shooter': 3, 'tactical': 1, 'wargame': 3 };
+  function tagScores(tags) {
+    let s = 0, o = 0;
+    tags.slice(0, 20).forEach((t, i) => {
+      const w = i < 5 ? 1.5 : i < 10 ? 1 : 0.6, k = t.toLowerCase();
+      if (STORY_TAGS[k]) s += STORY_TAGS[k] * w;
+      if (OTHER_TAGS[k]) o += OTHER_TAGS[k] * w;
+    });
+    return { s: Math.round(s * 10) / 10, o: Math.round(o * 10) / 10 };
+  }
+  // Avec la fiche Steam : tags des joueurs si dispo, sinon genres officiels + catégories (Single-player…)
   function classifySteam(name, meta) {
     if (!meta) return null;
     if (NOT_STORY.test(name)) return false;
     if (meta.type && meta.type !== 'game') return false;
+    if (meta.tags && meta.tags.length >= 5) {
+      const { s, o } = tagScores(meta.tags);
+      const solo = meta.tags.some(t => /^singleplayer$/i.test(t)) || (meta.categories || []).some(c => /single-player/i.test(c));
+      if (!solo && o >= 3) return false;
+      if (s >= 5 && s >= o * 1.2) return true;
+      if (o >= 4 && o > s) return false;
+      if (s >= 3.5 && o < 2) return true;
+      // indécis avec les tags : on retombe sur les genres
+    }
     const g = meta.genres.join('|').toLowerCase(), c = meta.categories.join('|').toLowerCase();
     if (!/single-player/.test(c)) return false;
     if (/massively multiplayer/.test(g)) return false;
@@ -396,7 +425,7 @@ const L = (() => {
     return null;
   }
 
-  return { classifySteam, gameKey, parseCSV, parseLibrary, isStory, hours, mergeState, LWW, daysBetween, weekStart, allModules, nextModule, pace, compile, normCmds, checkCmd, getBlock, checkOutput, checkForm, checkGen, GENS, expand6, compress6,
+  return { tagScores, classifySteam, gameKey, parseCSV, parseLibrary, isStory, hours, mergeState, LWW, daysBetween, weekStart, allModules, nextModule, pace, compile, normCmds, checkCmd, getBlock, checkOutput, checkForm, checkGen, GENS, expand6, compress6,
     ip2n, n2ip, maskN, isIp, dayKey, addDays, streak, bestStreak, isPaused, levelFromXp, xpForLevel, unlocked, buildDaily, progress };
 })();
 

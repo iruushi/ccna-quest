@@ -355,7 +355,7 @@ function gamesFiltered() {
 function gameRow(g) {
   const story = g.story === true ? 'Histoire' : g.story === false ? 'Autre' : 'À trier';
   return `<div class="game"><div><b>${h(g.name)}</b>${g.fav ? ' <span class="tag b">Favori</span>' : ''}<br>
-      <span class="mute">${h((g.platforms || []).join(' · ') || 'Plateforme inconnue')}${g.hltb ? ` · ~${g.hltb} h` : ''}${g.meta && g.meta.genres.length ? ` · ${h(g.meta.genres.slice(0, 3).join(', '))}` : ''}</span></div>
+      <span class="mute">${h((g.platforms || []).join(' · ') || 'Plateforme inconnue')}${g.hltb ? ` · ~${g.hltb} h` : ''}${g.meta && (g.meta.tags || []).length ? ` · ${h(g.meta.tags.slice(0, 3).join(', '))}` : g.meta && g.meta.genres.length ? ` · ${h(g.meta.genres.slice(0, 3).join(', '))}` : ''}</span></div>
     <div class="acts">
       <button class="btn sm" data-act="gstory" data-k="${h(g.k)}" aria-label="Changer le type de ${h(g.name)}">${story}</button>
       <select data-act="gstatus" data-k="${h(g.k)}" aria-label="Statut de ${h(g.name)}">${Object.entries(GSTAT).map(([v, l]) => `<option value="${v}" ${g.status === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
@@ -371,7 +371,7 @@ function viewGames() {
   const c = k => all.filter(g => !g.hidden && (k === 'story' ? g.story === true && g.status === 'todo' : k === 'current' ? g.status === 'current' : k === 'done' ? g.status === 'done' && g.story === true : k === 'sort' ? g.story == null && g.status !== 'skip' : g.story === false)).length;
   const cur = all.filter(g => g.status === 'current' && g.story !== false);
   const sugg = nextSuggestions();
-  const withSteam = all.filter(g => g.steam && !g.meta && !g.metaMiss && !(g.manual && g.manual.story)).length;
+  const withSteam = all.filter(g => g.steam && (!g.meta || !g.meta.tags) && !g.metaMiss && !(g.manual && g.manual.story)).length;
   const chips = [['story', `Histoire à faire (${c('story')})`], ['current', `En cours (${all.filter(g => g.status === 'current').length})`], ['done', `Terminés (${c('done')})`], ['sort', `À trier (${c('sort')})`], ['other', `Autres jeux (${c('other')})`], ['all', `Tous (${all.length})`]];
   if (!all.length) return `<h2>Ludothèque</h2>
     <section class="card"><h3>Importe ta bibliothèque Playnite</h3>
@@ -381,7 +381,7 @@ function viewGames() {
     ${cur.length ? cur.map(g => `<section class="card"><p class="mute" style="margin:0">En cours</p><div class="row sp"><h3 style="margin:0">${h(g.name)}</h3><button class="btn a" data-act="gdone" data-k="${h(g.k)}">Terminé !</button></div><p class="mute" style="margin:4px 0 0">${h((g.platforms || []).join(' · '))}${g.hltb ? ` · ~${g.hltb} h` : ''}</p></section>`).join('')
       : sugg.length ? `<section class="card"><h3>Prochain jeu conseillé</h3><div class="row sp"><span><b>${h(sugg[0].name)}</b> <span class="mute">${h((sugg[0].platforms || []).join(' · '))}</span></span><button class="btn p sm" data-act="gstart" data-k="${h(sugg[0].k)}">Commencer</button></div><p class="mute" style="margin:6px 0 0">Ou débloque la récompense « nouveau jeu solo » dans Bonus pour te l'offrir en récompense.</p></section>` : ''}
     ${withSteam || enrich.running || enrich.msg ? `<section class="card"><h3>Tri automatique avec Steam</h3>
-      <p class="mute" style="margin:0 0 8px">${Sync.on() ? (withSteam === 0 ? '' : `${withSteam} jeu${withSteam > 1 ? 'x' : ''} peu${withSteam > 1 ? 'vent' : 't'} être trié${withSteam > 1 ? 's' : ''} grâce à leur fiche Steam (genres, solo ou non). Ça prend quelques minutes pour une grosse bibliothèque.`) : 'Connecte la synchro (Réglages) : c\'est ton serveur qui interroge la boutique Steam.'}</p>
+      <p class="mute" style="margin:0 0 8px">${Sync.on() ? (withSteam === 0 ? '' : `${withSteam} jeu${withSteam > 1 ? 'x' : ''} peu${withSteam > 1 ? 'vent' : 't'} être trié${withSteam > 1 ? 's' : ''} grâce aux tags des joueurs Steam (« Story Rich », « Open World », « Automation »…). Ça prend quelques minutes pour une grosse bibliothèque.`) : 'Connecte la synchro (Réglages) : c\'est ton serveur qui interroge la boutique Steam.'}</p>
       <p id="enrichst" class="mute" style="margin:0 0 8px">${h(enrich.msg)}</p>
       ${Sync.on() && withSteam ? `<button class="btn p" data-act="genrich" ${enrich.running ? 'disabled' : ''}>${enrich.running ? 'Tri en cours…' : 'Trier mes jeux'}</button>` : ''}</section>` : ''}
     <div class="chips" role="group" aria-label="Filtre">${chips.map(([v, l]) => `<button data-act="gfilter" data-v="${v}" aria-pressed="${gFilter === v}">${l}</button>`).join('')}</div>
@@ -423,7 +423,7 @@ async function runEnrich() {
   if (enrich.running || !Sync.on()) return;
   enrich.running = true;
   const msg = t => { enrich.msg = t; const el = document.getElementById('enrichst'); if (el) el.textContent = t; };
-  const todo = () => gList().filter(g => g.steam && !g.meta && !g.metaMiss && !(g.manual && g.manual.story));
+  const todo = () => gList().filter(g => g.steam && (!g.meta || !g.meta.tags) && !g.metaMiss && !(g.manual && g.manual.story));
   const total = todo().length; let stuck = 0;
   if (route() === 'games') render();
   try {
@@ -434,7 +434,7 @@ async function runEnrich() {
       for (const g of batch) {
         if (!(g.steam in r.items)) continue;
         const meta = r.items[g.steam], G = st.games[g.k];
-        if (meta) { G.meta = meta; const cls = L.classifySteam(G.name, meta); if (cls !== null) G.story = cls; }
+        if (meta) { G.meta = meta; if (!(G.manual && G.manual.story)) G.story = L.classifySteam(G.name, meta); }
         else G.metaMiss = true;
         G.t = Date.now(); progressed++;
       }
@@ -489,7 +489,7 @@ function viewSettings() {
       <label class="f" for="imp">Importer un code</label><textarea id="imp" style="min-height:90px" placeholder="Colle ici un code exporté"></textarea>
       <div class="row" style="margin-top:8px"><button class="btn" data-act="import">Importer (remplace la progression de cet appareil)</button></div></section>
     <section class="card"><h3>Remise à zéro</h3><p class="mute">Efface la progression de cet appareil et le déconnecte de la synchro. Pour repartir de zéro partout, supprime aussi la fiche dans l'admin PocketBase.</p><button class="btn" data-act="reset">${resetArmed ? 'Clique encore pour tout effacer' : 'Tout effacer'}</button></section>
-    <p class="mute">CCNA Quest v1.3 · fonctionne hors ligne une fois installée.</p>`;
+    <p class="mute">CCNA Quest v1.4 · fonctionne hors ligne une fois installée.</p>`;
 }
 function exportCode() { return btoa(unescape(encodeURIComponent(JSON.stringify(st)))); }
 
