@@ -494,6 +494,7 @@ function viewRewards() {
         ? `<button class="btn a sm" data-act="redeem-ok" data-id="${r.id}">Confirmer</button><button class="btn sm" data-act="redeem-no">Annuler</button>`
         : `<button class="btn p sm" data-act="redeem" data-id="${r.id}" ${tokens() < r.cost ? 'disabled' : ''}>Débloquer</button><button class="btn sm" data-act="delrw" data-id="${r.id}" aria-label="Supprimer ${h(r.name)}">Suppr.</button>`}</div></div>
       ${tokens() < r.cost ? `<div class="bar" style="background:var(--line);margin-top:10px"><i style="width:${Math.max(0, Math.round(tokens() / r.cost * 100))}%"></i></div>` : ''}</section>`).join('')}
+    ${D.timeRewards.some(x => !st.rewards.some(r => r.id === x.id)) ? `<section class="card"><h3>Pack temps de jeu</h3><p class="mute">Au temps passé, 50 jetons de l'heure : ARAM 25, TFT 30, game de LoL 50, 2 h de jeu solo histoire 100, soirée Satisfactory ou Civ 6 de 3 h 150. Tu pourras modifier ou supprimer chaque récompense.</p><button class="btn p" data-act="rwpack" data-pack="time">Ajouter le pack</button></section>` : ''}
     ${D.suggestedRewards.some(x => !st.rewards.some(r => r.id === x.id)) ? `<section class="card"><h3>Pack de récompenses gamer</h3><p class="mute">TFT, Minecraft, LoL, Satisfactory, Civ 6, sessions histoire et nouveau jeu solo, de 100 à 3 000 jetons. Tu pourras modifier ou supprimer chaque récompense.</p><button class="btn p" data-act="rwpack">Ajouter le pack</button></section>` : ''}
     <section class="card"><h3>Ajouter une récompense</h3>
       <form id="rwform"><label class="f" for="rwn">Récompense</label><input type="text" id="rwn" required maxlength="80" placeholder="Ex. : soirée raid avec la team">
@@ -518,7 +519,7 @@ function viewSettings() {
       <label class="f" for="imp">Importer un code</label><textarea id="imp" style="min-height:90px" placeholder="Colle ici un code exporté"></textarea>
       <div class="row" style="margin-top:8px"><button class="btn" data-act="import">Importer (remplace la progression de cet appareil)</button></div></section>
     <section class="card"><h3>Remise à zéro</h3><p class="mute">Efface la progression de cet appareil et le déconnecte de la synchro. Pour repartir de zéro partout, supprime aussi la fiche dans l'admin PocketBase.</p><button class="btn" data-act="reset">${resetArmed ? 'Clique encore pour tout effacer' : 'Tout effacer'}</button></section>
-    <p class="mute">CCNA Quest v1.5 · fonctionne hors ligne une fois installée.</p>`;
+    <p class="mute">CCNA Quest v1.5.1 · fonctionne hors ligne une fois installée.</p>`;
 }
 function exportCode() { return btoa(unescape(encodeURIComponent(JSON.stringify(st)))); }
 
@@ -668,7 +669,8 @@ document.addEventListener('click', e => {
   else if (act === 'next') next(run, isBonus);
   else if (act === 'syncnow') Sync.run();
   else if (act === 'rwpack') {
-    for (const x of D.suggestedRewards) if (!st.rewards.some(r => r.id === x.id)) st.rewards.push({ ...x });
+    const pack = b.dataset.pack === 'time' ? D.timeRewards : D.suggestedRewards;
+    for (const x of pack) if (!st.rewards.some(r => r.id === x.id)) st.rewards.push({ ...x });
     st.rewards.sort((a, b) => a.cost - b.cost); save(); render(); toast('Pack ajouté');
   }
   else if (act === 'gfilter') { gFilter = b.dataset.v; gLimit = 60; render(); }

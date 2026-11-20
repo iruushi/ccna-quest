@@ -285,6 +285,14 @@ const DATA = {
     { id: 's8', name: 'M\'offrir un jeu que je veux vraiment', cost: 3000 }
   ],
 
+  timeRewards: [
+    { id: 't1', name: 'Une ARAM (~30 min)', cost: 25 },
+    { id: 't2', name: 'Une partie de TFT (~35-40 min)', cost: 30 },
+    { id: 't3', name: 'Une game de LoL (~1 h)', cost: 50 },
+    { id: 't4', name: 'Session jeu solo histoire (2 h)', cost: 100 },
+    { id: 't5', name: 'Soirée Satisfactory ou Civ 6 (3 h)', cost: 150 }
+  ],
+
   defaultRewards: [
     { id: 'r1', name: 'Session multi avec les potes, sans regarder l\'heure', cost: 150 },
     { id: 'r2', name: 'Soirée jeu sans limite', cost: 300 },
