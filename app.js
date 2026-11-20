@@ -324,6 +324,7 @@ function planCard() {
 
 /* ---------- Ludothèque ---------- */
 const GSTAT = { todo: 'À faire', current: 'En cours', done: 'Terminé', skip: 'Pas intéressé' };
+let resortArmed = false;
 let gFilter = 'story', gSearch = '', gLimit = 60, pickMode = false, enrich = { running: false, msg: '' };
 const gList = () => Object.entries(st.games || {}).map(([k, g]) => ({ k, ...g }));
 function nextSuggestions(n = 3) {
@@ -380,10 +381,15 @@ function viewGames() {
     ${pickMode ? `<section class="card" style="border-color:var(--buoy)"><h3>Récompense débloquée : choisis ton prochain jeu solo</h3>${sugg.length ? sugg.map(g => `<div class="row sp" style="padding:6px 0"><span><b>${h(g.name)}</b> <span class="mute">${h((g.platforms || []).join(' · '))}${g.hltb ? ` · ~${g.hltb} h` : ''}</span></span><button class="btn a sm" data-act="gstart" data-k="${h(g.k)}">Commencer</button></div>`).join('') : '<p class="mute">Aucun jeu à histoire « à faire » : trie quelques jeux d\'abord.</p>'}<button class="btn sm" data-act="gpickno" style="margin-top:8px">Plus tard</button></section>` : ''}
     ${cur.length ? cur.map(g => `<section class="card"><p class="mute" style="margin:0">En cours</p><div class="row sp"><h3 style="margin:0">${h(g.name)}</h3><button class="btn a" data-act="gdone" data-k="${h(g.k)}">Terminé !</button></div><p class="mute" style="margin:4px 0 0">${h((g.platforms || []).join(' · '))}${g.hltb ? ` · ~${g.hltb} h` : ''}</p></section>`).join('')
       : sugg.length ? `<section class="card"><h3>Prochain jeu conseillé</h3><div class="row sp"><span><b>${h(sugg[0].name)}</b> <span class="mute">${h((sugg[0].platforms || []).join(' · '))}</span></span><button class="btn p sm" data-act="gstart" data-k="${h(sugg[0].k)}">Commencer</button></div><p class="mute" style="margin:6px 0 0">Ou débloque la récompense « nouveau jeu solo » dans Bonus pour te l'offrir en récompense.</p></section>` : ''}
-    ${withSteam || enrich.running || enrich.msg ? `<section class="card"><h3>Tri automatique avec Steam</h3>
+    ${withSteam || enrich.running || enrich.msg || all.some(g => g.steam) ? `<section class="card"><h3>Tri automatique avec Steam</h3>
       <p class="mute" style="margin:0 0 8px">${Sync.on() ? (withSteam === 0 ? '' : `${withSteam} jeu${withSteam > 1 ? 'x' : ''} peu${withSteam > 1 ? 'vent' : 't'} être trié${withSteam > 1 ? 's' : ''} grâce aux tags des joueurs Steam (« Story Rich », « Open World », « Automation »…). Ça prend quelques minutes pour une grosse bibliothèque.`) : 'Connecte la synchro (Réglages) : c\'est ton serveur qui interroge la boutique Steam.'}</p>
       <p id="enrichst" class="mute" style="margin:0 0 8px">${h(enrich.msg)}</p>
-      ${Sync.on() && withSteam ? `<button class="btn p" data-act="genrich" ${enrich.running ? 'disabled' : ''}>${enrich.running ? 'Tri en cours…' : 'Trier mes jeux'}</button>` : ''}</section>` : ''}
+      <div class="row">
+      ${Sync.on() && withSteam ? `<button class="btn p" data-act="genrich" ${enrich.running ? 'disabled' : ''}>${enrich.running ? 'Tri en cours…' : 'Trier mes jeux'}</button>` : ''}
+      ${!enrich.running ? `<button class="btn" data-act="gresort">Relancer le tri</button>
+        <button class="btn" data-act="gresortall">${resortArmed ? 'Confirmer : oublier mes choix' : 'Tout retrier, même mes choix'}</button>` : ''}
+      </div>
+      <p class="mute" style="margin:8px 0 0">« Relancer le tri » réapplique les règles à tous les jeux et réessaie ceux que Steam n'avait pas trouvés, sans toucher aux jeux que tu as classés toi-même.</p></section>` : ''}
     <div class="chips" role="group" aria-label="Filtre">${chips.map(([v, l]) => `<button data-act="gfilter" data-v="${v}" aria-pressed="${gFilter === v}">${l}</button>`).join('')}</div>
     <input type="text" id="gsearch" placeholder="Rechercher un jeu" value="${h(gSearch)}" autocomplete="off" style="margin-bottom:6px">
     ${gFilter === 'sort' ? '<p class="mute">Touche le bouton « À trier » pour dire si c\'est un jeu à histoire ou un autre type.</p>' : ''}
@@ -489,7 +495,7 @@ function viewSettings() {
       <label class="f" for="imp">Importer un code</label><textarea id="imp" style="min-height:90px" placeholder="Colle ici un code exporté"></textarea>
       <div class="row" style="margin-top:8px"><button class="btn" data-act="import">Importer (remplace la progression de cet appareil)</button></div></section>
     <section class="card"><h3>Remise à zéro</h3><p class="mute">Efface la progression de cet appareil et le déconnecte de la synchro. Pour repartir de zéro partout, supprime aussi la fiche dans l'admin PocketBase.</p><button class="btn" data-act="reset">${resetArmed ? 'Clique encore pour tout effacer' : 'Tout effacer'}</button></section>
-    <p class="mute">CCNA Quest v1.4 · fonctionne hors ligne une fois installée.</p>`;
+    <p class="mute">CCNA Quest v1.4.1 · fonctionne hors ligne une fois installée.</p>`;
 }
 function exportCode() { return btoa(unescape(encodeURIComponent(JSON.stringify(st)))); }
 
@@ -652,6 +658,20 @@ document.addEventListener('click', e => {
   else if (act === 'gdone') { setGame(b.dataset.k, { status: 'done', doneAt: today() }, ['status']); toast('Jeu terminé, bravo !'); render(); }
   else if (act === 'gpickno') { pickMode = false; render(); }
   else if (act === 'genrich') runEnrich();
+  else if (act === 'gresort' || act === 'gresortall') {
+    if (act === 'gresortall' && !resortArmed) { resortArmed = true; render(); setTimeout(() => { resortArmed = false; if (route() === 'games') render(); }, 5000); return; }
+    resortArmed = false;
+    const all = act === 'gresortall'; let n = 0;
+    for (const g of Object.values(st.games || {})) {
+      if (all && g.manual) delete g.manual.story;
+      if (g.manual && g.manual.story) continue;
+      delete g.metaMiss;
+      g.story = g.meta ? L.classifySteam(g.name, g.meta) : (L.isStory({ name: g.name, genres: g.genres || [], features: [] }));
+      g.t = Date.now(); n++;
+    }
+    save(); render(); toast(`${n} jeux retriés`);
+    if (Sync.on()) runEnrich();
+  }
   else if (act === 'gimport') {
     const f = $('#gfile'), txt = $('#gpaste').value;
     if (f && f.files && f.files[0]) { f.files[0].text().then(importGames); }
