@@ -57,6 +57,15 @@ mode pause, et des récompenses jeu que tu choisis. Fonctionne hors ligne une fo
 Modifie les fichiers, puis change `VERSION` dans `sw.js` (ex. `ccna-quest-1.0.1`) et pousse
 sur GitHub. Les appareils récupèrent la nouvelle version à la prochaine ouverture avec réseau.
 
+## Banque de questions
+
+- `questions.js` : 189 QCM couvrant les 47 modules (format `[module, question, [bonne réponse, …3 mauvaises], explication]`,
+  la bonne réponse toujours en premier, l'appli mélange). Ajoute tes propres lignes à la fin.
+- `logic.js` : 17 générateurs (sous-réseaux, préfixes, EUI-64, types IPv6, ACL, table de routage, distance administrative,
+  coût OSPF, élection STP, route récapitulative…) : questions calculées, en nombre illimité.
+- Tirage : jamais vues d'abord, erreurs reprogrammées le lendemain, questions réussies mises de côté quelques jours.
+  Réglages › « Questions du défi » : tes modules ou tout le CCNA.
+
 ## Ajouter du contenu
 
 Tout est dans `data.js` :

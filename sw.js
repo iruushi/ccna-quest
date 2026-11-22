@@ -1,6 +1,6 @@
 /* Cache hors ligne. Change VERSION à chaque mise à jour pour forcer le rafraîchissement. */
-const VERSION = 'ccna-quest-1.5.1';
-const FILES = ['./', 'index.html', 'app.js', 'logic.js', 'data.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png'];
+const VERSION = 'ccna-quest-1.6.0';
+const FILES = ['./', 'index.html', 'app.js', 'logic.js', 'data.js', 'questions.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));

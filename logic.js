@@ -137,9 +137,137 @@ const L = (() => {
       const ok = expand6(v) === item.full && v.length <= item.fields[0].a.length;
       return [{ l: item.fields[0].l, ok }];
     }
-    return item.fields.map((f, i) => ({ l: f.l, ok: normAns(values[i] || '') === normAns(f.a) }));
+    if (item.type === 'eui64') {
+      const g = v => String(v || '').toLowerCase().replace(/\s/g, '').split(':').map(x => parseInt(x || '0', 16));
+      const u = g(values[0]), a = g(item.fields[0].a);
+      return [{ l: item.fields[0].l, ok: u.length === 4 && u.every((x, i) => x === a[i]) }];
+    }
+    const nf = v => normAns(v).replace(/^\//, '');
+    return item.fields.map((f, i) => ({ l: f.l, ok: nf(values[i] || '') === nf(f.a) }));
   }
-  const GENS = { subnet: genSubnet, binary: genBinary, ipv6: genIpv6, wildcard: genWildcard };
+  /* ---------- Générateurs v1.6 (réponses calculées) ----------
+     Format QCM : { type, q, o: [options mélangées], a: index de la bonne, e: explication }
+     Format champ : { type, q, fields: [{ l, a }], e } */
+  const shuffle = arr => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  function mcq(type, q, good, bad, e, extra) {
+    const o = shuffle([good, ...bad]);
+    return { type, q, o, a: o.indexOf(good), e, ...(extra || {}) };
+  }
+  const netOf = (n, p) => Math.floor(n / 2 ** (32 - p)) * 2 ** (32 - p);
+  const randPriv = () => pick([[10, rnd(0, 255), rnd(0, 255), rnd(0, 255)], [172, rnd(16, 31), rnd(0, 255), rnd(0, 255)], [192, 168, rnd(0, 255), rnd(0, 255)]]).join('.');
+
+  function genHosts() {
+    const p = rnd(16, 30);
+    return { type: 'hosts', q: `Combien d'adresses d'hôtes utilisables dans un sous-réseau /${p} ?`, fields: [{ l: 'Hôtes utilisables', a: String(2 ** (32 - p) - 2) }],
+      e: `2^${32 - p} − 2 = ${2 ** (32 - p) - 2} (on retire l'adresse réseau et le broadcast).` };
+  }
+  function genPrefixFor() {
+    const n = pick([rnd(3, 30), rnd(31, 300), rnd(301, 4000)]);
+    let b = 1; while (2 ** b - 2 < n) b++;
+    return { type: 'prefixFor', q: `Un VLAN d'Ar Mor doit accueillir ${n} hôtes. Quel est le plus petit sous-réseau possible (le préfixe le plus long) ?`,
+      fields: [{ l: 'Préfixe (ex. /26)', a: '/' + (32 - b) }], e: `Il faut ${b} bits d'hôte : 2^${b} − 2 = ${2 ** b - 2} ≥ ${n}, soit /${32 - b}.` };
+  }
+  function genMaskPrefix() {
+    const p = rnd(8, 30), m = n2ip(maskN(p));
+    return Math.random() < 0.5
+      ? { type: 'maskPrefix', q: `Quel préfixe correspond au masque ${m} ?`, fields: [{ l: 'Préfixe (ex. /24)', a: '/' + p }], e: `${m} = ${p} bits à 1.` }
+      : { type: 'maskPrefix', q: `Quel masque correspond à /${p} ?`, fields: [{ l: 'Masque', a: m }], e: `/${p} = ${p} bits à 1 : ${m}.` };
+  }
+  function genSameNet() {
+    const p = rnd(20, 29), ip1 = randPriv(), n1 = ip2n(ip1), net = netOf(n1, p), size = 2 ** (32 - p);
+    const same = Math.random() < 0.5;
+    let n2 = same ? net + rnd(1, size - 2) : net + size * pick([-1, 1]) + rnd(1, size - 2);
+    if (n2 === n1) n2 = net + ((n1 - net) % (size - 2)) + 1;
+    const ok = netOf(n2, p) === net;
+    return mcq('sameNet', `${ip1}/${p} et ${n2ip(n2)}/${p} sont-ils dans le même sous-réseau ?`, ok ? 'Oui' : 'Non', [ok ? 'Non' : 'Oui'],
+      `Réseau de la 1re : ${n2ip(net)}/${p}, de la 2e : ${n2ip(netOf(n2, p))}/${p}.`);
+  }
+  function genNthSubnet() {
+    const p = rnd(25, 29), cnt = 2 ** (p - 24), k = rnd(2, Math.min(cnt, 8)), base = `192.168.${rnd(0, 255)}`;
+    const net = ip2n(base + '.0') + (k - 1) * 2 ** (32 - p);
+    return { type: 'nthSubnet', q: `On découpe ${base}.0/24 en sous-réseaux /${p}. Quelle est l'adresse du sous-réseau n° ${k} ?`,
+      fields: [{ l: 'Adresse réseau', a: n2ip(net) }], e: `Pas de ${2 ** (32 - p)} : le n° ${k} commence à .${(k - 1) * 2 ** (32 - p)}.` };
+  }
+  function genIpv6Type() {
+    const h4 = () => rnd(0, 0xffff).toString(16);
+    const T = [
+      ['Unicast global (GUA)', () => `${pick(['2001', '2a01', '2600', '2c0f'])}:${h4()}:${h4()}::${h4()}`, 'Les GUA commencent par 2000::/3 (2 ou 3).'],
+      ['Link-local', () => `fe80::${h4()}:${h4()}`, 'fe80::/10 : valable uniquement sur le lien local.'],
+      ['Unique local (ULA)', () => `fd${rnd(0, 255).toString(16).padStart(2, '0')}:${h4()}:${h4()}::${h4()}`, 'fc00::/7 (en pratique fd00::/8) : l\'équivalent des adresses privées.'],
+      ['Multicast', () => pick(['ff02::1', 'ff02::2', 'ff02::1:ff' + rnd(0, 0xff).toString(16) + ':' + h4(), 'ff05::' + h4()]), 'ff00::/8 : toutes les adresses multicast IPv6.'],
+      ['Loopback', () => '::1', '::1 est l\'adresse de bouclage IPv6.']
+    ];
+    const t = pick(T);
+    return mcq('ipv6type', `De quel type est l'adresse IPv6 ${t[1]()} ?`, t[0], shuffle(T.filter(x => x !== t)).map(x => x[0]).slice(0, 3), t[2]);
+  }
+  function genEui64() {
+    const b = Array.from({ length: 6 }, () => rnd(0, 255)); b[0] &= 0xfc;
+    const mac = b.map(x => x.toString(16).padStart(2, '0').toUpperCase()).join('-');
+    const f = b[0] ^ 0x02, h2 = x => x.toString(16).padStart(2, '0');
+    const id = [h2(f) + h2(b[1]), h2(b[2]) + 'ff', 'fe' + h2(b[3]), h2(b[4]) + h2(b[5])].map(g => g.replace(/^0+(?=.)/, '')).join(':');
+    return { type: 'eui64', q: `Quel identifiant d'interface EUI-64 un PC calcule-t-il à partir de la MAC ${mac} ?`, fields: [{ l: 'Identifiant (64 bits, ex. 21a:2bff:fe3c:4d5e)', a: id }],
+      e: `On coupe la MAC en deux, on insère FFFE au milieu et on inverse le 7e bit : ${h2(b[0])} devient ${h2(f)}.` };
+  }
+  function genAclMatch() {
+    const p = pick([8, 16, 24, 24, 25, 26, 27, 28]), base = netOf(ip2n(randPriv()), p), size = 2 ** (32 - p);
+    const inside = Math.random() < 0.5;
+    const hn = inside ? base + rnd(1, Math.max(1, size - 2)) : (Math.random() < 0.5 ? base + size + rnd(0, Math.min(size, 200)) : base - rnd(1, Math.min(size, 200)));
+    const w = n2ip(2 ** 32 - 1 - maskN(p)), ok = netOf(hn, p) === base;
+    return mcq('aclMatch', `ACL : « access-list 10 permit ${n2ip(base)} ${w} ». Le paquet venant de ${n2ip(hn)} correspond-il à cette ligne ?`,
+      ok ? 'Oui' : 'Non', [ok ? 'Non' : 'Oui'], `Le wildcard ${w} couvre ${n2ip(base)} à ${n2ip(base + size - 1)}.`);
+  }
+  function genLpm() {
+    const a = rnd(1, 254), b = rnd(0, 255), c = rnd(0, 255);
+    const r = [
+      { p: `10.${a}.0.0/16`, nh: '172.31.0.2 (R2)', n: ip2n(`10.${a}.0.0`), len: 16 },
+      { p: `10.${a}.${b}.0/24`, nh: '172.31.0.6 (R3)', n: ip2n(`10.${a}.${b}.0`), len: 24 },
+      { p: `10.${a}.${b}.${Math.floor(c / 32) * 32}/27`, nh: '172.31.0.10 (R4)', n: ip2n(`10.${a}.${b}.${Math.floor(c / 32) * 32}`), len: 27 },
+      { p: '0.0.0.0/0', nh: '203.0.113.1 (FAI)', n: 0, len: 0 }
+    ];
+    const target = pick(r);
+    let d;
+    if (target.len === 27) d = target.n + rnd(1, 30);
+    else if (target.len === 24) { do { d = target.n + rnd(1, 254); } while (netOf(d, 27) === r[2].n); }
+    else if (target.len === 16) { let x; do { x = rnd(0, 255); } while (x === b); d = ip2n(`10.${a}.${x}.${rnd(1, 254)}`); }
+    else d = ip2n(`${pick([8, 9, 192, 151, 185])}.${rnd(0, 255)}.${rnd(0, 255)}.${rnd(1, 254)}`);
+    const best = r.filter(x => x.len === 0 || netOf(d, x.len) === x.n).sort((x, y) => y.len - x.len)[0];
+    const table = shuffle(r).map(x => `${x.p.padEnd(19)} via ${x.nh}`).join('\n');
+    return mcq('lpm', `Table de AML-R1 :\n${table}\nVers quel next-hop part un paquet pour ${n2ip(d)} ?`, best.nh, r.filter(x => x !== best).map(x => x.nh),
+      `La correspondance la plus longue est ${best.p}.`);
+  }
+  function genAdWin() {
+    const S = [['Route statique', 1], ['eBGP', 20], ['EIGRP', 90], ['OSPF', 110], ['RIP', 120]];
+    const set = shuffle(S).slice(0, rnd(2, 3)), best = set.slice().sort((x, y) => x[1] - y[1])[0];
+    const net = `192.168.${rnd(0, 255)}.0/24`;
+    return mcq('adWin', `AML-R1 apprend ${net} par ${set.map(x => x[0]).join(', ')}. Quelle source est installée dans la table de routage ?`, best[0],
+      S.filter(x => x !== best).map(x => x[0]).slice(0, 3), `Distance administrative la plus basse : ${set.map(x => `${x[0]} = ${x[1]}`).join(', ')}.`);
+  }
+  function genOspfCost() {
+    const ref = pick([100, 100, 1000, 10000]);
+    const L = [['FastEthernet (100 Mb/s)', 100], ['GigabitEthernet (1 Gb/s)', 1000], ['10 GigabitEthernet', 10000], ['Ethernet (10 Mb/s)', 10], ['Liaison série T1 (1,544 Mb/s)', 1.544]];
+    const path = Array.from({ length: rnd(2, 3) }, () => pick(L));
+    const cost = path.reduce((s, x) => s + Math.max(1, Math.floor(ref / x[1])), 0);
+    return { type: 'ospfCost', q: `Bande passante de référence OSPF : ${ref} Mb/s${ref === 100 ? ' (valeur par défaut)' : ''}. Quel est le coût du chemin qui traverse : ${path.map(x => x[0]).join(' + ')} ?`,
+      fields: [{ l: 'Coût total', a: String(cost) }], e: `Coût = référence ÷ bande passante, arrondi à l'entier inférieur, minimum 1 : ${path.map(x => Math.max(1, Math.floor(ref / x[1]))).join(' + ')} = ${cost}.` };
+  }
+  function genStpRoot() {
+    const names = shuffle(['AML-S1', 'AML-S2', 'AML-S3', 'AML-S4']).slice(0, 3);
+    const mac = () => Array.from({ length: 3 }, () => rnd(0, 0xffff).toString(16).padStart(4, '0')).join('.');
+    const sw = names.map(n => ({ n, pr: pick([32768, 32768, 28672, 24576, 32768, 4096]), mac: mac() }));
+    const root = sw.slice().sort((x, y) => x.pr - y.pr || x.mac.localeCompare(y.mac))[0];
+    return mcq('stpRoot', `Qui devient pont racine STP ?\n${sw.map(s => `${s.n} : priorité ${s.pr}, MAC ${s.mac}`).join('\n')}`, root.n, sw.filter(s => s !== root).map(s => s.n),
+      `Le bridge ID le plus bas gagne : priorité d'abord, puis MAC la plus basse en cas d'égalité.`);
+  }
+  function genSummary() {
+    const k = rnd(1, 3), cnt = 2 ** k, second = Math.floor(rnd(0, 255) / cnt) * cnt, first = pick([172, 10, 192]);
+    const b1 = first === 172 ? rnd(16, 31) : first === 192 ? 168 : rnd(0, 255);
+    const nets = Array.from({ length: cnt }, (_, i) => `${first}.${b1}.${second + i}.0/24`);
+    return { type: 'summary', q: `Quelle route récapitulative couvre exactement ces réseaux ?\n${nets.join('\n')}`, fields: [{ l: 'Route récapitulative (ex. 172.16.8.0/22)', a: `${first}.${b1}.${second}.0/${24 - k}` }],
+      e: `${cnt} réseaux /24 consécutifs et alignés : on retire ${k} bit${k > 1 ? 's' : ''} au préfixe, soit /${24 - k}.` };
+  }
+  const GENS = { subnet: genSubnet, binary: genBinary, ipv6: genIpv6, wildcard: genWildcard, hosts: genHosts, prefixFor: genPrefixFor,
+    maskPrefix: genMaskPrefix, sameNet: genSameNet, nthSubnet: genNthSubnet, ipv6type: genIpv6Type, eui64: genEui64, aclMatch: genAclMatch,
+    lpm: genLpm, adWin: genAdWin, ospfCost: genOspfCost, stpRoot: genStpRoot, summary: genSummary };
 
   /* ---------- Dates, série ---------- */
   const dayKey = d => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
@@ -177,28 +305,49 @@ const L = (() => {
     }
     return set;
   }
-  function buildDaily(data, doneMods, size = 5) {
+  // Tirage pondéré : questions jamais vues d'abord, erreurs qui reviennent le lendemain, questions récentes mises de côté
+  function buildDaily(data, doneMods, size = 5, opts = {}) {
+    const hist = opts.hist || {}, todayK = opts.today || dayKey(new Date()), qbank = opts.qbank || [];
+    const all = opts.scope === 'all';
     const u = unlocked(data.courses, doneMods);
+    const okMod = m => all || u.has(m);
+    const weight = id => {
+      const h = hist[id];
+      if (!h) return 3;
+      const d = daysBetween(h.last, todayK);
+      if (!h.ok) return d >= 1 ? 5 : 0.3;
+      return d < 3 ? 0.05 : d < 7 ? 0.4 : d < 21 ? 1 : 1.5;
+    };
     const pool = [];
-    data.mcq.forEach((q, i) => u.has(q.m) && pool.push({ kind: 'mcq', i }));
-    data.cmd.forEach((q, i) => u.has(q.m) && pool.push({ kind: 'cmd', i }));
-    data.gens.forEach(g => u.has(g.m) && pool.push({ kind: 'gen', type: g.type }, { kind: 'gen', type: g.type }));
-    if (pool.length < size) {
-      // début de parcours : on complète avec les bases (binaire, sous-réseaux)
-      pool.push({ kind: 'gen', type: 'binary' }, { kind: 'gen', type: 'subnet' }, { kind: 'gen', type: 'binary' });
-      data.mcq.forEach((q, i) => q.m.startsWith('itn:') && +q.m.split(':')[1] <= 4 && pool.push({ kind: 'mcq', i }));
+    data.mcq.forEach((q, i) => okMod(q.m) && pool.push({ kind: 'mcq', i, w: weight('mcq:' + i) }));
+    qbank.forEach((q, i) => okMod(q[0]) && pool.push({ kind: 'q2', i, w: weight('q2:' + i) }));
+    data.cmd.forEach((q, i) => okMod(q.m) && pool.push({ kind: 'cmd', i, w: weight('cmd:' + i) }));
+    const gens = data.gens.filter(g => okMod(g.m));
+    // ~35 % d'exercices générés (calculs), ~65 % de questions écrites
+    const fixedW = pool.reduce((a, p) => a + p.w, 0) || 3;
+    gens.forEach(g => pool.push({ kind: 'gen', type: g.type, w: (0.35 / 0.65) * fixedW / gens.length }));
+    if (pool.length < size * 2) {
+      // tout début de parcours : bases d'ITN 1 à 5
+      ['binary', 'binary'].forEach(t => pool.push({ kind: 'gen', type: t, w: 1 }));
+      qbank.forEach((q, i) => q[0].startsWith('itn:') && +q[0].split(':')[1] <= 5 && !okMod(q[0]) && pool.push({ kind: 'q2', i, w: weight('q2:' + i) }));
     }
-    const out = [];
-    const bag = pool.slice();
-    while (out.length < size && bag.length) {
-      const j = Math.floor(Math.random() * bag.length);
-      const it = bag.splice(j, 1)[0];
-      if (it.kind !== 'gen' && out.some(o => o.kind === it.kind && o.i === it.i)) continue;
-      out.push(it.kind === 'gen' ? { kind: 'gen', item: GENS[it.type]() } : it);
-      if (!bag.length && out.length < size) bag.push(...pool);
+    const out = [], usedGen = {};
+    let guard = 0;
+    while (out.length < size && guard++ < 500) {
+      const cand = pool.filter(p => p.w > 0 && !(p.kind !== 'gen' && out.some(o => o.kind === p.kind && o.i === p.i)) && !(p.kind === 'gen' && usedGen[p.type] >= 1));
+      if (!cand.length) break;
+      let r = Math.random() * cand.reduce((a, p) => a + p.w, 0), it = cand[0];
+      for (const p of cand) { r -= p.w; if (r <= 0) { it = p; break; } }
+      if (it.kind === 'gen') { usedGen[it.type] = (usedGen[it.type] || 0) + 1; out.push({ kind: 'gen', item: GENS[it.type]() }); }
+      else if (it.kind === 'q2') {
+        const perm = [0, 1, 2, 3]; for (let k = 3; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); [perm[k], perm[j]] = [perm[j], perm[k]]; }
+        out.push({ kind: 'q2', i: it.i, perm });
+      } else out.push({ kind: it.kind, i: it.i });
     }
+    while (out.length < size) out.push({ kind: 'gen', item: GENS[pick(['binary', 'subnet', 'hosts', 'maskPrefix'])]() });
     return out;
   }
+  const itemId = it => it.kind === 'gen' ? null : `${it.kind}:${it.i}`;
 
   function progress(data, st) {
     const total = data.courses.reduce((a, c) => a + c.modules.length, 0);
@@ -238,7 +387,7 @@ const L = (() => {
      - jours, journal des modules, labos terminés, récompenses débloquées : union
      - plan, récompenses, pauses, scores d'examen : le champ modifié le plus récemment gagne
      - défi du jour en cours, mode PC/téléphone : restent locaux */
-  const LWW = ['plan', 'rewards', 'pauses', 'exams'];
+  const LWW = ['plan', 'rewards', 'pauses', 'exams', 'scope'];
   const COUNTERS = ['xpDev', 'spentDev', 'ansDev', 'corDev'];
   const sum = o => Object.values(o || {}).reduce((a, b) => a + b, 0);
   const clone = x => x === undefined ? undefined : JSON.parse(JSON.stringify(x));
@@ -284,6 +433,9 @@ const L = (() => {
     const games = clone(a.games || {});
     for (const [k, g] of Object.entries(b.games || {})) if (!games[k] || (g.t || 0) > (games[k].t || 0)) games[k] = clone(g);
     out.games = games;
+    const qh = clone(a.qhist || {});
+    for (const [k, v] of Object.entries(b.qhist || {})) if (!qh[k] || v.n > qh[k].n || (v.n === qh[k].n && v.last > qh[k].last)) qh[k] = clone(v);
+    out.qhist = qh;
     out.updatedAt = Math.max(a.updatedAt || 0, b.updatedAt || 0);
     return out;
   }
@@ -425,7 +577,7 @@ const L = (() => {
     return null;
   }
 
-  return { tagScores, classifySteam, gameKey, parseCSV, parseLibrary, isStory, hours, mergeState, LWW, daysBetween, weekStart, allModules, nextModule, pace, compile, normCmds, checkCmd, getBlock, checkOutput, checkForm, checkGen, GENS, expand6, compress6,
+  return { itemId, tagScores, classifySteam, gameKey, parseCSV, parseLibrary, isStory, hours, mergeState, LWW, daysBetween, weekStart, allModules, nextModule, pace, compile, normCmds, checkCmd, getBlock, checkOutput, checkForm, checkGen, GENS, expand6, compress6,
     ip2n, n2ip, maskN, isIp, dayKey, addDays, streak, bestStreak, isPaused, levelFromXp, xpForLevel, unlocked, buildDaily, progress };
 })();
 

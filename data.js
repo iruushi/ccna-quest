@@ -176,7 +176,20 @@ const DATA = {
     { type: 'subnet', m: 'itn:11', name: 'Sous-réseau éclair' },
     { type: 'binary', m: 'itn:5', name: 'Conversion binaire' },
     { type: 'ipv6', m: 'itn:12', name: 'Compression IPv6' },
-    { type: 'wildcard', m: 'ensa:4', name: 'Masque générique' }
+    { type: 'wildcard', m: 'ensa:4', name: 'Masque générique' },
+    { type: 'hosts', m: 'itn:11', name: 'Nombre d\'hôtes' },
+    { type: 'prefixFor', m: 'itn:11', name: 'Dimensionner un sous-réseau' },
+    { type: 'maskPrefix', m: 'itn:11', name: 'Masque et préfixe' },
+    { type: 'sameNet', m: 'itn:11', name: 'Même sous-réseau ?' },
+    { type: 'nthSubnet', m: 'itn:11', name: 'Découpage /24' },
+    { type: 'ipv6type', m: 'itn:12', name: 'Types d\'adresses IPv6' },
+    { type: 'eui64', m: 'itn:12', name: 'Calcul EUI-64' },
+    { type: 'aclMatch', m: 'ensa:5', name: 'Correspondance ACL' },
+    { type: 'lpm', m: 'srwe:14', name: 'Table de routage' },
+    { type: 'adWin', m: 'srwe:14', name: 'Distance administrative' },
+    { type: 'ospfCost', m: 'ensa:2', name: 'Coût OSPF' },
+    { type: 'stpRoot', m: 'srwe:5', name: 'Élection STP' },
+    { type: 'summary', m: 'srwe:15', name: 'Route récapitulative' }
   ],
 
   /* Labos Packet Tracer scénarisés — campagne Ar Mor Logistique */

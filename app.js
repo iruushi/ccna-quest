@@ -4,14 +4,14 @@ const KEY = 'ccna-quest-v1';
 const $ = s => document.querySelector(s);
 const h = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const today = () => L.dayKey(new Date());
-const XP = { mcq: 10, cmd: 15, gen: 10, daily: 30, read: 40, quiz: 30, quizHigh: 10, module: 20 };
+const XP = { mcq: 10, q2: 10, cmd: 15, gen: 10, daily: 30, read: 40, quiz: 30, quizHigh: 10, module: 20 };
 const NETACAD = 'https://www.netacad.com/fr/dashboard';
 const DEFAULT_TARGET = '2027-06-30';
 
 /* ---------- État ---------- */
 const fresh = () => ({ v: 1, xp: 0, spent: 0, modules: [], exams: {}, labs: {}, days: [], pauses: [],
   rewards: D.defaultRewards.map(r => ({ ...r })), redeemed: [], mode: null, daily: null, bonus: null,
-  stats: { answered: 0, correct: 0 }, created: today(), modLog: {}, modSteps: {}, plan: null, games: {} });
+  stats: { answered: 0, correct: 0 }, created: today(), modLog: {}, modSteps: {}, plan: null, games: {}, qhist: {}, scope: 'unlocked' });
 let st = fresh(), memOnly = false;
 try { const raw = localStorage.getItem(KEY); if (raw) st = Object.assign(fresh(), JSON.parse(raw)); }
 catch (e) { memOnly = true; }
@@ -89,6 +89,27 @@ function itemView(it, res) {
       <p class="ticket" style="margin-top:10px">${ticketHtml(q.ticket)}</p><p class="q">${h(q.q)}</p><div class="opts">${opts}</div>
       ${res ? `<p class="fb ${res.ok ? '' : 'ko'}">${res.ok ? 'Bien vu.' : 'Raté.'} ${h(q.e)}</p>` : ''}`;
   }
+  if (it.kind === 'q2') {
+    const q = QBANK[it.i], perm = it.perm || [0, 1, 2, 3], good = perm.indexOf(0);
+    const opts = perm.map((j, k) => {
+      let cls = '';
+      if (res) { if (k === good) cls = 'good'; else if (k === res.pick) cls = 'bad'; }
+      return `<button class="opt ${cls}" data-act="q2" data-k="${k}" ${res ? 'disabled' : ''}>${h(q[2][j])}</button>`;
+    }).join('');
+    return `<span class="tag">${h(modName(q[0]))}</span><p class="q" style="margin-top:10px">${h(q[1])}</p><div class="opts">${opts}</div>
+      ${res ? `<p class="fb ${res.ok ? '' : 'ko'}">${res.ok ? 'Bien vu.' : 'Raté.'} ${h(q[3])}</p>` : ''}`;
+  }
+  if (it.kind === 'gen' && it.item.o) {
+    const g = it.item, name = (D.gens.find(x => x.type === g.type) || {}).name || 'Exercice';
+    const opts = g.o.map((o, k) => {
+      let cls = '';
+      if (res) { if (k === g.a) cls = 'good'; else if (k === res.pick) cls = 'bad'; }
+      return `<button class="opt ${cls}" data-act="gmcq" data-k="${k}" ${res ? 'disabled' : ''}>${h(o)}</button>`;
+    }).join('');
+    const [first, ...rest] = g.q.split('\n');
+    return `<span class="tag">${h(name)}</span><p class="q" style="margin-top:10px">${h(first)}</p>${rest.length ? `<pre>${h(rest.join('\n'))}</pre>` : ''}<div class="opts">${opts}</div>
+      ${res ? `<p class="fb ${res.ok ? '' : 'ko'}">${res.ok ? 'Exact.' : 'Raté.'} ${h(g.e || '')}</p>` : ''}`;
+  }
   if (it.kind === 'cmd') {
     const q = D.cmd[it.i];
     return `<span class="tag">${h(modName(q.m))}</span> <span class="tag">Commandes IOS</span>
@@ -98,12 +119,13 @@ function itemView(it, res) {
       ${res ? '' : '<div class="row" style="margin-top:10px"><button class="btn p" data-act="cmd">Vérifier</button><button class="btn" data-act="giveup">Voir la solution</button></div>'}`;
   }
   const g = it.item;
-  const title = g.type === 'subnet' ? `Hôte ${g.ip}/${g.p} (masque ${g.mask})` : g.q;
+  const title0 = g.type === 'subnet' ? `Hôte ${g.ip}/${g.p} (masque ${g.mask})` : g.q;
+  const [title, ...more] = title0.split('\n');
   const fields = g.fields.map((f, k) => `<label class="f" for="gf${k}">${h(f.l)}</label>
     <input type="text" id="gf${k}" inputmode="${g.type === 'ipv6' ? 'text' : 'decimal'}" autocomplete="off" autocapitalize="off" spellcheck="false" value="${h(res ? res.vals[k] : '')}" ${res ? 'readonly' : ''}>`).join('');
   const name = D.gens.find(x => x.type === g.type).name;
-  return `<span class="tag">${h(name)}</span><p class="q" style="margin-top:10px">${h(title)}</p>${fields}
-    ${res ? checksHtml(res.checks) + (res.ok ? '<p class="fb">Exact.</p>' : `<p class="fb ko">Réponses : ${g.fields.map(f => `${h(f.l)} = <code>${h(f.a)}</code>`).join(' · ')}</p>`)
+  return `<span class="tag">${h(name)}</span><p class="q" style="margin-top:10px">${h(title)}</p>${more.length ? `<pre>${h(more.join('\n'))}</pre>` : ''}${fields}
+    ${res ? checksHtml(res.checks) + (res.ok ? `<p class="fb">Exact.${g.e ? ' ' + h(g.e) : ''}</p>` : `<p class="fb ko">Réponses : ${g.fields.map(f => `${h(f.l)} = <code>${h(f.a)}</code>`).join(' · ')}${g.e ? '<br>' + h(g.e) : ''}</p>`)
       : '<div class="row" style="margin-top:12px"><button class="btn p" data-act="gen">Vérifier</button></div>'}`;
 }
 const ticketHtml = t => h(t).replace(/\n(.+)/g, '\n<code>$1</code>');
@@ -116,7 +138,7 @@ function modName(m) {
 /* ---------- Aujourd'hui ---------- */
 function ensureDaily() {
   if (!st.daily || st.daily.date !== today()) {
-    st.daily = { date: today(), items: L.buildDaily(D, st.modules), res: [], done: false };
+    st.daily = { date: today(), items: L.buildDaily(D, st.modules, 5, { qbank: QBANK, hist: st.qhist, today: today(), scope: st.scope }), res: [], done: false };
     save();
   }
 }
@@ -165,7 +187,9 @@ function answer(run, ok, extra) {
   run.pendingRes = { ok, ...extra };
   st.stats.answered++; if (ok) st.stats.correct++;
   const it = run.items[run.res.length];
-  if (ok) gain(XP[it.kind], 'bonne réponse'); else save();
+  const id = L.itemId(it);
+  if (id) { st.qhist = st.qhist || {}; const hq = st.qhist[id] || { n: 0, w: 0 }; st.qhist[id] = { n: hq.n + 1, w: hq.w + (ok ? 0 : 1), ok, last: today() }; }
+  if (ok) gain(XP[it.kind] || 10, 'bonne réponse'); else save();
   render();
 }
 function next(run, isBonus) {
@@ -507,7 +531,15 @@ function viewRewards() {
 let resetArmed = false;
 function viewSettings() {
   const p = pausedNow();
+  const qSeen = Object.keys(st.qhist || {}).length, qTotal = QBANK.length + D.mcq.length + D.cmd.length;
   return `${syncCard()}
+    <section class="card"><h3>Questions du défi</h3>
+      <p class="mute">${qTotal} questions écrites (${qSeen} déjà vues) et ${D.gens.length} exercices générés à l'infini (sous-réseaux, routage, ACL, OSPF, STP…). Les questions jamais vues passent en premier, les erreurs reviennent le lendemain.</p>
+      <div class="seg" role="group" aria-label="Programme des questions">
+        <button data-act="scope" data-v="unlocked" aria-pressed="${st.scope !== 'all'}">Mes modules</button>
+        <button data-act="scope" data-v="all" aria-pressed="${st.scope === 'all'}">Tout le CCNA</button>
+      </div>
+      <p class="mute" style="margin:0">« Mes modules » = modules cochés + le prochain de chaque cours. « Tout le CCNA » pioche partout (révision avant l'examen). Le changement s'applique à la prochaine série.</p></section>
     <section class="card"><h3>Mode pause (déplacement, repos)</h3>
       <p class="mute">Pendant une pause, les jours sans défi ne cassent pas ta série. Le défi reste faisable si tu en as envie.</p>
       <button class="btn ${p ? 'a' : 'p'}" data-act="pause">${p ? 'Terminer la pause' : 'Démarrer une pause aujourd\'hui'}</button>
@@ -519,7 +551,7 @@ function viewSettings() {
       <label class="f" for="imp">Importer un code</label><textarea id="imp" style="min-height:90px" placeholder="Colle ici un code exporté"></textarea>
       <div class="row" style="margin-top:8px"><button class="btn" data-act="import">Importer (remplace la progression de cet appareil)</button></div></section>
     <section class="card"><h3>Remise à zéro</h3><p class="mute">Efface la progression de cet appareil et le déconnecte de la synchro. Pour repartir de zéro partout, supprime aussi la fiche dans l'admin PocketBase.</p><button class="btn" data-act="reset">${resetArmed ? 'Clique encore pour tout effacer' : 'Tout effacer'}</button></section>
-    <p class="mute">CCNA Quest v1.5.1 · fonctionne hors ligne une fois installée.</p>`;
+    <p class="mute">CCNA Quest v1.6 · fonctionne hors ligne une fois installée.</p>`;
 }
 function exportCode() { return btoa(unescape(encodeURIComponent(JSON.stringify(st)))); }
 
@@ -655,6 +687,8 @@ document.addEventListener('click', e => {
   const [run, isBonus] = curRun();
   if (act === 'mode') { st.mode = { date: today(), v: b.dataset.v }; save(); render(); }
   else if (act === 'mcq') { const q = D.mcq[run.items[run.res.length].i]; const k = +b.dataset.k; answer(run, k === q.a, { pick: k }); }
+  else if (act === 'q2') { const it = run.items[run.res.length]; const k = +b.dataset.k; answer(run, (it.perm || [0, 1, 2, 3])[k] === 0, { pick: k }); }
+  else if (act === 'gmcq') { const g = run.items[run.res.length].item; const k = +b.dataset.k; answer(run, k === g.a, { pick: k }); }
   else if (act === 'cmd') {
     const q = D.cmd[run.items[run.res.length].i]; const text = $('#ans').value;
     if (!text.trim()) return toast('Écris au moins une commande');
@@ -668,6 +702,7 @@ document.addEventListener('click', e => {
   }
   else if (act === 'next') next(run, isBonus);
   else if (act === 'syncnow') Sync.run();
+  else if (act === 'scope') { st.scope = b.dataset.v; save(); render(); toast(st.scope === 'all' ? 'Questions sur tout le CCNA' : 'Questions sur tes modules'); }
   else if (act === 'rwpack') {
     const pack = b.dataset.pack === 'time' ? D.timeRewards : D.suggestedRewards;
     for (const x of pack) if (!st.rewards.some(r => r.id === x.id)) st.rewards.push({ ...x });
@@ -720,7 +755,7 @@ document.addEventListener('click', e => {
     if (ms.read) completeModule(id);
     save(); render();
   }
-  else if (act === 'bonus') { st.bonus = { date: today(), items: L.buildDaily(D, st.modules), res: [] }; save(); render(); }
+  else if (act === 'bonus') { st.bonus = { date: today(), items: L.buildDaily(D, st.modules, 5, { qbank: QBANK, hist: st.qhist, today: today(), scope: st.scope }), res: [] }; save(); render(); }
   else if (act === 'labstep') {
     const l = D.labs.find(x => x.id === b.dataset.id), k = +b.dataset.k, s = labState(l.id);
     s.texts[k] = $('#ls' + k).value;
